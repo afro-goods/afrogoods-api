@@ -9,8 +9,9 @@ import { AppService } from './app.service';
 import { config } from './config';
 
 // Feature modules
-// import { UserModule } from './users/user.module';
-// import { AuthModule } from './authentication/auth.module';
+import { FirebaseModule } from './firebase/firebase.module';
+import { UsersModule } from './users/users.module';
+import { AuthModule } from './auth/auth.module';
 // import { ProductModule } from './products/product.module';
 // import { OrderModule } from './orders/order.module';
 // import { PaymentModule } from './payments/payment.module';
@@ -30,7 +31,11 @@ const ServerModules = [
   }),
 ];
 
-const FeatureModules = []; // Add your feature modules here later
+const FeatureModules = [
+  FirebaseModule,
+  UsersModule,
+  AuthModule,
+];
 
 @Module({
   imports: [...ServerModules, ...FeatureModules],

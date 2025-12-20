@@ -12,14 +12,18 @@ import * as fs from 'fs';
         if (!admin.apps.length) {
           const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
           if (!serviceAccountPath) {
-            throw new Error('FIREBASE_SERVICE_ACCOUNT_PATH environment variable is missing');
+            throw new Error(
+              'FIREBASE_SERVICE_ACCOUNT_PATH environment variable is missing',
+            );
           }
 
           // Resolve the full path from project root
           const fullPath = path.resolve(process.cwd(), serviceAccountPath);
 
           if (!fs.existsSync(fullPath)) {
-            throw new Error(`Firebase service account file not found at ${fullPath}`);
+            throw new Error(
+              `Firebase service account file not found at ${fullPath}`,
+            );
           }
 
           const serviceAccount = require(fullPath);

@@ -1,67 +1,42 @@
-// // src/common/providers/redis.provider.ts
-// import { Provider } from '@nestjs/common';
+// import type { Provider } from '@nestjs/common';
 // import Redis from 'ioredis';
 // import { config } from 'src/config';
 
 // export const REDIS_CLIENT = 'REDIS_CLIENT';
 
-// export const RedisProvider: Provider = {
+// export const RedisProvider: Provider<Redis> = {
 //   provide: REDIS_CLIENT,
-//   useFactory: () => {
-//     const redisOptions = config.redis.url
-//       ? config.redis.url // Upstash: full redis(s):// URL with auth + TLS
-//       : {
-//           host: config.redis.host,
-//           port: config.redis.port,
-//           password: config.redis.password,
-//           tls: config.env.isProd ? {} : undefined, // Enable TLS in production if using individual vars
-//         };
+//   useFactory: (): Redis => {
+//     let redisClient: Redis;
 
-//     const client = new Redis(redisOptions);
+//     if (config.redis.url) {
+//       redisClient = new Redis(config.redis.url, {
+//         maxRetriesPerRequest: null, // ← REQUIRED for BullMQ shared connection
+//         enableOfflineQueue: false, // ← Recommended for Upstash
+//         lazyConnect: true,
+//       });
+//     } else {
+//       redisClient = new Redis({
+//         host: config.redis.host,
+//         port: config.redis.port,
+//         password: config.redis.password,
+//         tls: config.env.isProd ? {} : undefined,
+//         maxRetriesPerRequest: null, // ← Also here for consistency
+//         enableOfflineQueue: false,
+//       });
+//     }
 
-//     client.on('error', (err) => {
-//       console.error('Redis connection error:', err);
-//     });
-
-//     client.on('connect', () => {
+//     redisClient.on('connect', () => {
 //       console.log('Redis connected successfully');
 //     });
 
-//     return client;
+//     redisClient.on('error', (err: any) => {
+//       if (err.code === 'ECONNRESET') {
+//         return;
+//       }
+//       console.error('Redis connection error:', err);
+//     });
+
+//     return redisClient;
 //   },
 // };
-
-// src/common/providers/redis.provider.ts
-import { Provider } from '@nestjs/common';
-import Redis from 'ioredis';
-import { config } from 'src/config';
-
-export const REDIS_CLIENT = 'REDIS_CLIENT';
-
-export const RedisProvider: Provider<Redis> = {
-  provide: REDIS_CLIENT,
-  useFactory: (): Redis => {
-    let redisClient: Redis;
-
-    if (config.redis.url) {
-      redisClient = new Redis(config.redis.url);
-    } else {
-      redisClient = new Redis({
-        host: config.redis.host,
-        port: config.redis.port,
-        password: config.redis.password,
-        tls: config.env.isProd ? {} : undefined,
-      });
-    }
-
-    redisClient.on('connect', () => {
-      console.log('Redis connected successfully');
-    });
-
-    redisClient.on('error', (err) => {
-      console.error('Redis connection error:', err);
-    });
-
-    return redisClient;
-  },
-};

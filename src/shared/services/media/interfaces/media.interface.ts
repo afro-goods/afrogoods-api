@@ -1,4 +1,3 @@
-// Shared types for media uploads
 export type MediaFolder =
   | 'products'
   | 'profiles'

@@ -12,6 +12,8 @@ import { config } from './config';
 import { FirebaseModule } from './firebase/firebase.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { SharedModule } from './shared/shared.module';
+// import { QueueModule } from './queue/queue.module';
 // import { ProductModule } from './products/product.module';
 // import { OrderModule } from './orders/order.module';
 // import { PaymentModule } from './payments/payment.module';
@@ -31,11 +33,7 @@ const ServerModules = [
   }),
 ];
 
-const FeatureModules = [
-  FirebaseModule,
-  UsersModule,
-  AuthModule,
-];
+const FeatureModules = [FirebaseModule, UsersModule, AuthModule, SharedModule];
 
 @Module({
   imports: [...ServerModules, ...FeatureModules],

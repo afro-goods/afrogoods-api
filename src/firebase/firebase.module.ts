@@ -1,7 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import * as admin from 'firebase-admin';
-import * as path from 'path';
-import * as fs from 'fs';
+import { config } from 'src/config';
 
 @Global()
 @Module({
@@ -10,19 +9,25 @@ import * as fs from 'fs';
       provide: 'FIREBASE_ADMIN',
       useFactory: () => {
         if (!admin.apps.length) {
-          const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
-          if (!serviceAccountPath) {
-            throw new Error('FIREBASE_SERVICE_ACCOUNT_PATH environment variable is missing');
+          const base64 = config.firebase.serviceAccountBase64;
+
+          if (!base64) {
+            throw new Error(
+              'FIREBASE_SERVICE_ACCOUNT_BASE64 environment variable is missing',
+            );
           }
 
-          // Resolve the full path from project root
-          const fullPath = path.resolve(process.cwd(), serviceAccountPath);
+          let serviceAccount: admin.ServiceAccount;
 
-          if (!fs.existsSync(fullPath)) {
-            throw new Error(`Firebase service account file not found at ${fullPath}`);
+          try {
+            const decoded = Buffer.from(base64, 'base64').toString('utf-8');
+            serviceAccount = JSON.parse(decoded);
+          } catch (error) {
+            throw new Error(
+              'Failed to decode or parse FIREBASE_SERVICE_ACCOUNT_BASE64',
+              error,
+            );
           }
-
-          const serviceAccount = require(fullPath);
 
           admin.initializeApp({
             credential: admin.credential.cert(serviceAccount),

@@ -8,18 +8,11 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { config } from './config';
 
-// Feature modules
 import { FirebaseModule } from './firebase/firebase.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { SharedModule } from './shared/shared.module';
-// import { QueueModule } from './queue/queue.module';
-// import { ProductModule } from './products/product.module';
-// import { OrderModule } from './orders/order.module';
-// import { PaymentModule } from './payments/payment.module';
-// import { CartModule } from './carts/cart.module';
-// import { ReviewModule } from './reviews/review.module';
-// import { NotificationModule } from './notifications/notification.module';
+import { CartModule } from './cart/cart.module'; 
 
 const ServerModules = [
   ScheduleModule.forRoot(),
@@ -33,7 +26,13 @@ const ServerModules = [
   }),
 ];
 
-const FeatureModules = [FirebaseModule, UsersModule, AuthModule, SharedModule];
+const FeatureModules = [
+  FirebaseModule,
+  UsersModule,
+  AuthModule,
+  SharedModule,
+  CartModule, // ✅ REGISTERED
+];
 
 @Module({
   imports: [...ServerModules, ...FeatureModules],

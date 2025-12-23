@@ -9,7 +9,7 @@ import {
   Query,
   Delete,
 } from '@nestjs/common';
-import { ProductsService } from './products.service';
+import { ProductsService } from './product.service';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { FirebaseAuthGuard } from 'src/auth/guards/firebase-auth.guard';

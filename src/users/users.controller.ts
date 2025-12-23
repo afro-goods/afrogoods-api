@@ -6,7 +6,7 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import { UserRole } from './interfaces/user.interface';
 import { User } from './schemas/user.schema';
-import { PaginationDto } from 'src/shared/services/pagination/dtos/pagination.dto';
+import { PaginationDto } from 'src/shared/services/pagination/dto/pagination.dto';
 
 @Controller('users')
 @UseGuards(FirebaseAuthGuard)

@@ -7,9 +7,9 @@ import {
 } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 import { UsersService } from '../users/users.service';
-import { RegisterDto } from './dtos/register.dto';
+import { RegisterDto } from './dto/register.dto';
 import { UserRole } from 'src/users/interfaces/user.interface';
-import { LoginDto } from './dtos/login.dto';
+import { LoginDto } from './dto/login.dto';
 
 @Injectable()
 export class AuthService {
@@ -29,8 +29,9 @@ export class AuthService {
       }
 
       if (registerDto.username) {
+        const trimmedUsername = registerDto.username.trim();
         const usernameExists =
-          await this.usersService.findByUsernameOrEmail('username');
+          await this.usersService.findByUsernameOrEmail(trimmedUsername);
         if (usernameExists && usernameExists.username === username) {
           throw new ConflictException('Username already exists');
         }
@@ -77,8 +78,6 @@ export class AuthService {
         .verifyIdToken(idToken);
 
       const user = await this.usersService.findByFirebaseUid(decodedToken.uid);
-
-      console.log('userdata:', user);
 
       if (!user) {
         throw new UnauthorizedException(

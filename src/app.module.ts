@@ -9,12 +9,12 @@ import { AppService } from './app.service';
 import { config } from './config';
 
 // Feature modules
-import { FirebaseModule } from './firebase/firebase.module';
-import { UsersModule } from './users/users.module';
-import { AuthModule } from './auth/auth.module';
-import { SharedModule } from './shared/shared.module';
+import { FirebaseModule } from 'src/firebase/firebase.module';
+import { UsersModule } from 'src/users/users.module';
+import { AuthModule } from 'src/auth/auth.module';
+import { SharedModule } from 'src/shared/shared.module';
 // import { QueueModule } from './queue/queue.module';
-// import { ProductModule } from './products/product.module';
+import { ProductsModule } from 'src/product/products.module';
 // import { OrderModule } from './orders/order.module';
 // import { PaymentModule } from './payments/payment.module';
 // import { CartModule } from './carts/cart.module';
@@ -33,7 +33,13 @@ const ServerModules = [
   }),
 ];
 
-const FeatureModules = [FirebaseModule, UsersModule, AuthModule, SharedModule];
+const FeatureModules = [
+  FirebaseModule,
+  UsersModule,
+  AuthModule,
+  SharedModule,
+  ProductsModule,
+];
 
 @Module({
   imports: [...ServerModules, ...FeatureModules],

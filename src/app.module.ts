@@ -14,7 +14,7 @@ import { UsersModule } from 'src/users/users.module';
 import { AuthModule } from 'src/auth/auth.module';
 import { SharedModule } from 'src/shared/shared.module';
 // import { QueueModule } from './queue/queue.module';
-import { ProductsModule } from 'src/product/products.module';
+import { ProductsModule } from 'src/product/product.module';
 // import { OrderModule } from './orders/order.module';
 // import { PaymentModule } from './payments/payment.module';
 // import { CartModule } from './carts/cart.module';

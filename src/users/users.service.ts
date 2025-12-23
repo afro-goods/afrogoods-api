@@ -1,33 +1,31 @@
-import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-} from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { Model, Connection } from 'mongoose';
 import { User } from './schemas/user.schema';
 import { UserRole } from './interfaces/user.interface';
-import { CreateUserDto } from './dtos/create-user.dto';
+import { CreateUserDto } from './dto/create-user.dto';
 import { PaginationOptions } from 'src/shared/services/pagination/interfaces/pagination.interface';
 import { PaginationService } from 'src/shared/services/pagination/services/pagination.service';
+import { inTransaction } from 'src/utilities/transaction';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectModel(User.name) private userModel: Model<User>,
+    @InjectConnection() private readonly connection: Connection,
     private paginationService: PaginationService,
   ) {}
 
   async createUser(createUserDto: CreateUserDto): Promise<User> {
-    try {
-      const user = new this.userModel(createUserDto);
-      return await user.save();
-    } catch (error) {
-      if (error.code === 11000) {
-        throw new ConflictException('User already exists');
-      }
-      throw error;
-    }
+    return await inTransaction(this.connection, async (session) => {
+      const user = new this.userModel({
+        ...createUserDto,
+      });
+
+      await user.save({ session });
+
+      return user;
+    });
   }
 
   async findByFirebaseUid(firebaseUid: string): Promise<User | null> {

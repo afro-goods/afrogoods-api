@@ -8,11 +8,18 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { config } from './config';
 
-import { FirebaseModule } from './firebase/firebase.module';
-import { UsersModule } from './users/users.module';
-import { AuthModule } from './auth/auth.module';
-import { SharedModule } from './shared/shared.module';
-import { CartModule } from './cart/cart.module'; 
+// Feature modules
+import { FirebaseModule } from 'src/firebase/firebase.module';
+import { UsersModule } from 'src/users/users.module';
+import { AuthModule } from 'src/auth/auth.module';
+import { SharedModule } from 'src/shared/shared.module';
+// import { QueueModule } from './queue/queue.module';
+import { ProductsModule } from 'src/product/product.module';
+// import { OrderModule } from './orders/order.module';
+// import { PaymentModule } from './payments/payment.module';
+import { CartModule } from './cart/cart.module';
+// import { ReviewModule } from './reviews/review.module';
+// import { NotificationModule } from './notifications/notification.module';
 
 const ServerModules = [
   ScheduleModule.forRoot(),
@@ -28,10 +35,11 @@ const ServerModules = [
 
 const FeatureModules = [
   FirebaseModule,
+  CartModule,
   UsersModule,
   AuthModule,
   SharedModule,
-  CartModule, // ✅ REGISTERED
+  ProductsModule,
 ];
 
 @Module({
@@ -45,4 +53,4 @@ const FeatureModules = [
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

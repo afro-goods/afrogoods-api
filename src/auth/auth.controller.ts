@@ -8,18 +8,19 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { RegisterDto } from './dtos/register.dto';
-import { LoginDto } from './dtos/login.dto';
+import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
 import { FirebaseAuthGuard } from './guards/firebase-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { User } from 'src/users/schemas/user.schema';
+import { FirebaseRegisterGuard } from './guards/firebase-register.guard';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
-  @UseGuards(FirebaseAuthGuard)
+  @UseGuards(FirebaseRegisterGuard)
   async register(
     @Body() registerDto: RegisterDto,
     @CurrentUser('firebaseUid') firebaseUid: string,

@@ -1,23 +1,21 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { CartItem, CartItemSchema } from './cart-item.schema';
-import { CartStatus } from '../enums/cart-status.enum';
-
-export type CartDocument = Cart & Document;
 
 @Schema({ timestamps: true })
 export class Cart {
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, unique: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId: Types.ObjectId;
 
-  @Prop({ type: [CartItemSchema], default: [] })
+  @Prop({ type: [CartItemSchema], default: [] }) // 🔴 MUST be schema
   items: CartItem[];
-
-  @Prop({ enum: CartStatus, default: CartStatus.ACTIVE })
-  status: CartStatus;
 
   @Prop({ default: 0 })
   totalAmount: number;
+
+  @Prop({ default: 'active' })
+  status: string;
 }
 
+export type CartDocument = Cart & Document;
 export const CartSchema = SchemaFactory.createForClass(Cart);

@@ -57,4 +57,12 @@ export class CartController {
   async removeItem(@Req() req, @Body('productId') productId: string) {
     return this.cartService.removeItem(new Types.ObjectId(req.user.id), productId);
   }
+
+  @Delete('clear')
+async clearCart(@Req() req) {
+  return this.cartService.clearCart(new Types.ObjectId(req.user.id));
 }
+
+}
+
+

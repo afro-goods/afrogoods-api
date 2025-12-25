@@ -36,12 +36,7 @@ export class FirebaseAuthGuard implements CanActivate {
         throw new UnauthorizedException('User not found in database');
       }
 
-      request.user = {
-        id: user._id,
-        firebaseUid: user.firebaseUid,
-        email: user.email,
-        role: user.role,
-      };
+      request.user = user;
 
       return true;
     } catch (error) {

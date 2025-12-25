@@ -13,18 +13,25 @@ import { PaginationDto } from 'src/shared/services/pagination/dto/pagination.dto
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  @Get('me')
+  getMe(@CurrentUser() user: User) {
+    return {
+      id: user._id.toString(),
+      email: user.email,
+      username: user.username,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      phoneNumber: user.phoneNumber,
+      address: user.address,
+      createdAt: user.createdAt,
+    };
+  }
+
   @Get()
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  findAll(
-    @Query() pagination: PaginationDto,
-    @Query('role') role?: UserRole,
-    @CurrentUser() currentUser?: User,
-  ) {
-    console.log(
-      `Admin access granted for user: ${currentUser?.email} (Role: ${currentUser?.role})`,
-    );
-
+  findAll(@Query() pagination: PaginationDto, @Query('role') role?: UserRole) {
     return this.usersService.findAll(pagination, role);
   }
 

@@ -1,4 +1,3 @@
-// src/auth/guards/firebase-register.guard.ts
 import {
   Injectable,
   CanActivate,

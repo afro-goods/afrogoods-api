@@ -31,6 +31,7 @@ export class ProductsService {
     private readonly mediaService: MediaService,
   ) {}
 
+  // ---------- CATEGORY ----------
   async createCategory(dto: CreateCategoryDto) {
     return await inTransaction(this.connection, async (session) => {
       try {
@@ -70,8 +71,13 @@ export class ProductsService {
     });
   }
 
-  findAllCategories() {
-    return this.categoryModel.find({ isActive: true }).exec();
+  async findAllCategories() {
+    return this.categoryModel
+      .find({ isActive: true })
+      .select('name description')
+      .sort({ name: 1 })
+      .lean()
+      .exec();
   }
 
   async deleteCategory(id: string) {

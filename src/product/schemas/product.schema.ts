@@ -14,7 +14,7 @@ export class Product {
   category: Types.ObjectId;
 
   @Prop({ required: true })
-  price: number; // CAD
+  price: number;
 
   @Prop({ default: 0 })
   stock: number;

@@ -17,7 +17,7 @@ import { SharedModule } from 'src/shared/shared.module';
 import { ProductsModule } from 'src/product/product.module';
 // import { OrderModule } from './orders/order.module';
 // import { PaymentModule } from './payments/payment.module';
-// import { CartModule } from './carts/cart.module';
+import { CartModule } from './cart/cart.module';
 // import { ReviewModule } from './reviews/review.module';
 // import { NotificationModule } from './notifications/notification.module';
 
@@ -35,6 +35,7 @@ const ServerModules = [
 
 const FeatureModules = [
   FirebaseModule,
+  CartModule,
   UsersModule,
   AuthModule,
   SharedModule,
@@ -52,4 +53,4 @@ const FeatureModules = [
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

@@ -25,18 +25,27 @@ export class FirebaseAuthGuard implements CanActivate {
       );
     }
 
-    const token = authHeader.split('Bearer ')[1];
+    const token = authHeader.replace('Bearer ', '');
 
     try {
-      const decodedToken = await this.firebaseAdmin.auth().verifyIdToken(token);
+      const decodedToken = await this.firebaseAdmin
+        .auth()
+        .verifyIdToken(token);
 
-      const user = await this.usersService.findByFirebaseUid(decodedToken.uid);
+      const user = await this.usersService.findByFirebaseUid(
+        decodedToken.uid,
+      );
 
       if (!user) {
         throw new UnauthorizedException('User not found in database');
       }
+
+      // ✅ EXPLICIT & SAFE USER OBJECT
       request.user = {
-        ...user,
+        id: user._id, // 👈 THIS FIXES EVERYTHING
+        firebaseUid: user.firebaseUid,
+        email: user.email,
+        role: user.role,
       };
 
       return true;

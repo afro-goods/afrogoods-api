@@ -7,7 +7,7 @@ export class Cart {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId: Types.ObjectId;
 
-  @Prop({ type: [CartItemSchema], default: [] }) // 🔴 MUST be schema
+  @Prop({ type: [CartItemSchema], default: [] })
   items: CartItem[];
 
   @Prop({ default: 0 })

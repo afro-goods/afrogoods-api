@@ -6,13 +6,14 @@ import {
   Patch,
   Body,
   UseGuards,
-  Req,
   Param,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { CartService } from './cart.service';
 import { FirebaseAuthGuard } from '../auth/guards/firebase-auth.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AddToCartDto } from './dto/add-to-cart.dto';
+import { SyncCartDto } from './dto/sync-cart.dto';
 
 @Controller('cart')
 @UseGuards(FirebaseAuthGuard)
@@ -20,22 +21,25 @@ export class CartController {
   constructor(private readonly cartService: CartService) {}
 
   @Get()
-  async getCart(@Req() req) {
-    return this.cartService.getCart(new Types.ObjectId(req.user.id));
+  async getCart(@CurrentUser('id') userId: string) {
+    return this.cartService.getCart(new Types.ObjectId(userId));
   }
 
   @Post('add')
-  async addToCart(@Req() req, @Body() dto: AddToCartDto) {
-    return this.cartService.addToCart(new Types.ObjectId(req.user.id), dto);
+  async addToCart(
+    @CurrentUser('id') userId: string,
+    @Body() dto: AddToCartDto,
+  ) {
+    return this.cartService.addToCart(new Types.ObjectId(userId), dto);
   }
 
   @Patch('increase/:productId')
   async increaseQuantity(
-    @Req() req,
+    @CurrentUser('id') userId: string,
     @Param('productId') productId: string,
   ) {
     return this.cartService.changeQuantity(
-      new Types.ObjectId(req.user.id),
+      new Types.ObjectId(userId),
       productId,
       1,
     );
@@ -43,26 +47,31 @@ export class CartController {
 
   @Patch('decrease/:productId')
   async decreaseQuantity(
-    @Req() req,
+    @CurrentUser('id') userId: string,
     @Param('productId') productId: string,
   ) {
     return this.cartService.changeQuantity(
-      new Types.ObjectId(req.user.id),
+      new Types.ObjectId(userId),
       productId,
       -1,
     );
   }
 
   @Delete('remove')
-  async removeItem(@Req() req, @Body('productId') productId: string) {
-    return this.cartService.removeItem(new Types.ObjectId(req.user.id), productId);
+  async removeItem(
+    @CurrentUser('id') userId: string,
+    @Body('productId') productId: string,
+  ) {
+    return this.cartService.removeItem(new Types.ObjectId(userId), productId);
   }
 
   @Delete('clear')
-async clearCart(@Req() req) {
-  return this.cartService.clearCart(new Types.ObjectId(req.user.id));
+  async clearCart(@CurrentUser('id') userId: string) {
+    return this.cartService.clearCart(new Types.ObjectId(userId));
+  }
+
+  @Post('sync')
+  async syncCart(@CurrentUser('id') userId: string, @Body() dto: SyncCartDto) {
+    return this.cartService.replaceCart(userId, dto.items);
+  }
 }
-
-}
-
-

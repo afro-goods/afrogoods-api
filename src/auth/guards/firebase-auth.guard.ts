@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
   Inject,
 } from '@nestjs/common';
-import { UsersService } from '../../users/users.service';
+import { UsersService } from 'src/users/users.service';
 import * as admin from 'firebase-admin';
 
 @Injectable()
@@ -28,21 +28,16 @@ export class FirebaseAuthGuard implements CanActivate {
     const token = authHeader.replace('Bearer ', '');
 
     try {
-      const decodedToken = await this.firebaseAdmin
-        .auth()
-        .verifyIdToken(token);
+      const decodedToken = await this.firebaseAdmin.auth().verifyIdToken(token);
 
-      const user = await this.usersService.findByFirebaseUid(
-        decodedToken.uid,
-      );
+      const user = await this.usersService.findByFirebaseUid(decodedToken.uid);
 
       if (!user) {
         throw new UnauthorizedException('User not found in database');
       }
 
-      // ✅ EXPLICIT & SAFE USER OBJECT
       request.user = {
-        id: user._id, // 👈 THIS FIXES EVERYTHING
+        id: user._id,
         firebaseUid: user.firebaseUid,
         email: user.email,
         role: user.role,

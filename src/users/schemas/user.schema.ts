@@ -35,7 +35,7 @@ export class User extends Document {
   emailVerified: boolean;
 
   @Prop()
-  lastLoginAt?: Date;
+  lastLogin?: Date;
 
   @Prop({ type: Object })
   metadata?: Record<string, any>;

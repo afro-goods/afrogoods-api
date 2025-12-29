@@ -67,7 +67,7 @@ export class UsersService {
 
   async updateLastLogin(firebaseUid: string): Promise<void> {
     await this.userModel
-      .findOneAndUpdate({ firebaseUid }, { lastLoginAt: new Date() })
+      .findOneAndUpdate({ firebaseUid }, { lastLogin: new Date() })
       .exec();
   }
 

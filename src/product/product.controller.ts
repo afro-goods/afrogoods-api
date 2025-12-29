@@ -54,7 +54,7 @@ export class ProductsController {
     return this.productsService.deleteCategory(id);
   }
 
-  @Post()
+  @Post('create')
   @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   createProduct(@Body() dto: CreateProductDto) {

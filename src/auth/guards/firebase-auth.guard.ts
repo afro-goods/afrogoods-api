@@ -29,7 +29,6 @@ export class FirebaseAuthGuard implements CanActivate {
 
     try {
       const decodedToken = await this.firebaseAdmin.auth().verifyIdToken(token);
-
       const user = await this.usersService.findByFirebaseUid(decodedToken.uid);
 
       if (!user) {

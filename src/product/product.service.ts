@@ -74,7 +74,7 @@ export class ProductsService {
   async findAllCategories() {
     return this.categoryModel
       .find({ isActive: true })
-      .select('name description')
+      .select('name description isActive')
       .sort({ name: 1 })
       .lean()
       .exec();

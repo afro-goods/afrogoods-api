@@ -29,7 +29,7 @@ const ServerModules = [
     }),
   }),
   ThrottlerModule.forRoot({
-    throttlers: [{ limit: 10, ttl: 60000 }],
+    throttlers: [{ limit: 100, ttl: 60000 }],
   }),
 ];
 
@@ -53,4 +53,4 @@ const FeatureModules = [
     },
   ],
 })
-export class AppModule { }
+export class AppModule {}

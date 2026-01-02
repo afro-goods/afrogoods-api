@@ -19,7 +19,7 @@ export class CartService {
 
     @InjectModel(Product.name)
     private readonly productModel: Model<ProductDocument>,
-  ) {}
+  ) { }
 
   private toObjectId(id: string | Types.ObjectId | undefined): Types.ObjectId {
     if (!id) {

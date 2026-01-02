@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { MongooseModule } from '@nestjs/mongoose';
 
+
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { config } from './config';
@@ -15,7 +16,7 @@ import { AuthModule } from 'src/auth/auth.module';
 import { SharedModule } from 'src/shared/shared.module';
 // import { QueueModule } from './queue/queue.module';
 import { ProductsModule } from 'src/product/product.module';
-// import { OrderModule } from './orders/order.module';
+import { OrdersModule } from './orders/orders.module';
 // import { PaymentModule } from './payments/payment.module';
 import { CartModule } from './cart/cart.module';
 // import { ReviewModule } from './reviews/review.module';
@@ -40,6 +41,7 @@ const FeatureModules = [
   AuthModule,
   SharedModule,
   ProductsModule,
+  OrdersModule,
 ];
 
 @Module({

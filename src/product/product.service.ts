@@ -105,60 +105,66 @@ export class ProductsService {
 
   // ---------- PRODUCT ----------
   async createProduct(dto: CreateProductDto) {
-    return await inTransaction(this.connection, async (session) => {
-      try {
-        const category = await this.categoryModel
-          .findById(dto.category)
-          .session(session);
-        if (!category) throw new NotFoundException('Category not found');
-        if (!category.isActive)
-          throw new ConflictException('Category is inactive');
+  return await inTransaction(this.connection, async (session) => {
+    try {
+      // 🔹 DEBUG: log the incoming category ID
+      console.log('📝 Product DTO category:', dto.category);
 
-        let imageUrls: string[] = [];
+      const category = await this.categoryModel
+        .findById(dto.category)
+        .session(session);
 
-        if (dto.images && dto.images.length > 0) {
-          const uploadPromises = dto.images.map(async (img) => {
-            const base64Data = cleanBase64(img.uri);
-            if (!base64Data) return null;
+      // 🔹 DEBUG: log the found category
+      console.log('📝 Found category from DB:', category);
 
-            const buffer = Buffer.from(base64Data, 'base64');
+      if (!category) throw new NotFoundException('Category not found');
+      if (!category.isActive)
+        throw new ConflictException('Category is inactive');
 
-            const result = await this.mediaService.uploadFile(buffer, {
-              folder: 'products',
-              resourceType: 'image',
-            });
+      let imageUrls: string[] = [];
 
-            return result.secure_url;
+      if (dto.images && dto.images.length > 0) {
+        const uploadPromises = dto.images.map(async (img) => {
+          const base64Data = cleanBase64(img.uri);
+          if (!base64Data) return null;
+
+          const buffer = Buffer.from(base64Data, 'base64');
+
+          const result = await this.mediaService.uploadFile(buffer, {
+            folder: 'products',
+            resourceType: 'image',
           });
 
-          const urls = (await Promise.all(uploadPromises)).filter(
-            Boolean,
-          ) as string[];
-          imageUrls = urls;
-        }
+          return result.secure_url;
+        });
 
-        const [product] = await this.productModel.create(
-          [
-            {
-              ...dto,
-              images: imageUrls,
-              category: dto.category,
-            },
-          ],
-          { session },
-        );
-
-        await product.populate('category', 'name description isActive');
-
-        return product;
-      } catch (error) {
-        console.warn(
-          'Product creation failed — uploaded images remain in Cloudinary (no public_id stored)',
-        );
-        throw error;
+        const urls = (await Promise.all(uploadPromises)).filter(Boolean) as string[];
+        imageUrls = urls;
       }
-    });
-  }
+
+      const [product] = await this.productModel.create(
+        [
+          {
+            ...dto,
+            images: imageUrls,
+            category: dto.category,
+          },
+        ],
+        { session },
+      );
+
+      await product.populate('category', 'name description isActive');
+
+      return product;
+    } catch (error) {
+      console.warn(
+        'Product creation failed — uploaded images remain in Cloudinary (no public_id stored)',
+      );
+      throw error;
+    }
+  });
+}
+
 
   async findAllProducts(query: ProductQueryDto) {
     const { page, limit, search, category, sort } = query;

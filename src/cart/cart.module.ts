@@ -13,7 +13,7 @@ import { Product, ProductSchema } from 'src/product/schemas/product.schema';
     ]),
   ],
   controllers: [CartController],
-  providers: [CartService],
-  exports: [CartService],
+  providers: [CartService], 
+  exports: [CartService],  
 })
 export class CartModule {}

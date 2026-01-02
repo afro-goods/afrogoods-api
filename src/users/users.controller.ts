@@ -6,7 +6,7 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import { UserRole } from './interfaces/user.interface';
 import { User } from './schemas/user.schema';
-import { PaginationDto } from 'src/shared/services/pagination/dto/pagination.dto';
+import { GetUsersQueryDto } from './dto/get-users-query.dto';
 
 @Controller('users')
 @UseGuards(FirebaseAuthGuard)
@@ -31,8 +31,8 @@ export class UsersController {
   @Get()
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  findAll(@Query() pagination: PaginationDto, @Query('role') role?: UserRole) {
-    return this.usersService.findAll(pagination, role);
+  findAll(@Query() query: GetUsersQueryDto) {
+    return this.usersService.findAll(query, query.role, query.search);
   }
 
   @Get(':id')

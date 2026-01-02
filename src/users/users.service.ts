@@ -51,11 +51,21 @@ export class UsersService {
     return user;
   }
 
-  async findAll(pagination: PaginationOptions<User>, role?: UserRole) {
+  async findAll(pagination: PaginationOptions<User>, role?: UserRole, search?: string) {
     const filter: Record<string, any> = {};
 
     if (role) {
       filter.role = role;
+    }
+
+    if (search) {
+      const searchRegex = new RegExp(search, 'i'); // Case-insensitive search
+      filter.$or = [
+        { firstName: searchRegex },
+        { lastName: searchRegex },
+        { email: searchRegex },
+        { username: searchRegex },
+      ];
     }
 
     return this.paginationService.paginate<User>(this.userModel, {

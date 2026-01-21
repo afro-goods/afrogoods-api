@@ -10,4 +10,6 @@ export class CartItemInput {
 
   @IsNumber()
   priceAtAddedTime: number;
+
+  selectedAttributes?: Record<string, any>;
 }

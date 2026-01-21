@@ -10,11 +10,14 @@ export class CartItem {
   })
   productId: Types.ObjectId;
 
-  @Prop({ required: true, min: 1, default: 1 })
+  @Prop({ type: Number, required: true, min: 1, default: 1 })
   quantity: number;
 
-  @Prop({ required: true })
+  @Prop({ type: Number, required: true })
   priceAtAddedTime: number;
+
+  @Prop({ type: Object, default: {} })
+  selectedAttributes?: Record<string, any>;
 }
 
 export const CartItemSchema = SchemaFactory.createForClass(CartItem);

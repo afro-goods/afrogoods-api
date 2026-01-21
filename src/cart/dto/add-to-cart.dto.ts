@@ -10,5 +10,8 @@ export class AddToCartDto {
 
   @IsOptional()
   @IsNumber({}, { message: 'price must be a number' })
-  price?: number; // optional field for testing
+  price?: number;
+
+  @IsOptional()
+  selectedAttributes?: Record<string, any>;
 }

@@ -1,4 +1,3 @@
-// src/orders/schemas/order-item.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
 import { Product } from '../../product/schemas/product.schema';
@@ -12,7 +11,7 @@ export class OrderItem {
   quantity: number;
 
   @Prop({ required: true })
-  priceAtPurchase: number; // snapshot
+  priceAtPurchase: number;
 }
 
 export const OrderItemSchema = SchemaFactory.createForClass(OrderItem);

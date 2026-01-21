@@ -15,7 +15,6 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { FirebaseAuthGuard } from 'src/auth/guards/firebase-auth.guard';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { CreateCategoryDto } from './dto/create-category.dto';
 import { UserRole } from 'src/users/interfaces/user.interface';
 import { ProductQueryDto } from './dto/product-query.dto';
 
@@ -24,14 +23,16 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   // ---------- PUBLIC ----------
-  @Get('categories')
-  getCategories() {
-    return this.productsService.findAllCategories();
-  }
-
   @Get()
   getProducts(@Query() query: ProductQueryDto) {
     return this.productsService.findAllProducts(query);
+  }
+
+  @Get('all')
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  getAllProductsIncludingArchived(@Query() query: ProductQueryDto) {
+    return this.productsService.findAllProductsIncludingArchived(query);
   }
 
   @Get(':id')
@@ -40,20 +41,6 @@ export class ProductsController {
   }
 
   // ---------- ADMIN ----------
-  @Post('categories')
-  @UseGuards(FirebaseAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  createCategory(@Body() dto: CreateCategoryDto) {
-    return this.productsService.createCategory(dto);
-  }
-
-  @Delete('categories/:id')
-  @UseGuards(FirebaseAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  deleteCategory(@Param('id') id: string) {
-    return this.productsService.deleteCategory(id);
-  }
-
   @Post('create')
   @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)

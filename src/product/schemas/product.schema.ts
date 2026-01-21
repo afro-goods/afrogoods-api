@@ -1,44 +1,54 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
-import { Category } from './category.schema';
+import { AvailabilityStatus } from '../enums/availabilty-status.enum';
 
 @Schema({ timestamps: true })
 export class Product {
-  @Prop({ required: true, trim: true })
+  @Prop({ type: String, required: true, trim: true })
   name: string;
 
-  @Prop({ trim: true })
+  @Prop({ type: String, trim: true })
   description?: string;
 
-  @Prop({ type: Types.ObjectId, ref: Category.name, required: true })
+  @Prop({ type: Types.ObjectId, ref: 'Category', required: true })
   category: Types.ObjectId;
 
-  @Prop({ required: true })
+  @Prop({ type: Number, required: true })
   price: number;
 
-  @Prop({ default: 0 })
+  @Prop({ type: Number, default: 0 })
   stock: number;
 
-  @Prop({ default: 'CAD' })
+  @Prop({ type: String, default: 'CAD' })
   currency: string;
 
   @Prop({ type: [String], default: [] })
   images: string[];
 
-  @Prop({ default: true })
-  isActive: boolean;
+  @Prop({
+    type: String,
+    enum: AvailabilityStatus,
+    default: AvailabilityStatus.IN_STOCK,
+  })
+  availabilityStatus: AvailabilityStatus;
 
-  @Prop()
+  @Prop({ type: String })
   brand?: string;
 
-  @Prop()
+  @Prop({ type: String })
   weight?: string;
 
-  @Prop({ default: false })
+  @Prop({ type: Boolean, default: false })
   isFrozen: boolean;
 
-  @Prop({ default: false })
+  @Prop({ type: Boolean, default: false })
   isOrganic: boolean;
+
+  @Prop({ type: [String], default: [] })
+  tags: string[];
+
+  @Prop({ type: [Types.ObjectId], ref: 'ProductAttribute', default: [] })
+  attributes: Types.ObjectId[];
 }
 
 export type ProductDocument = Product & Document;

@@ -6,8 +6,11 @@ import {
   IsBoolean,
   IsArray,
   ArrayMaxSize,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { FileInput } from 'src/shared/inputs/file.input';
+import { CreateProductAttributeDto } from '../../attributes/dto/create-product-attribute.dto';
 
 export class CreateProductDto {
   @IsString()
@@ -46,4 +49,21 @@ export class CreateProductDto {
   @IsOptional()
   @IsBoolean()
   isOrganic?: boolean;
+
+  @IsOptional()
+  @IsString()
+  availabilityStatus?: string;
+
+  // New: Product tags
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
+
+  // New: Product attributes (variants/options)
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateProductAttributeDto)
+  attributes?: CreateProductAttributeDto[];
 }

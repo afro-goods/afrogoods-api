@@ -13,11 +13,14 @@ import { FirebaseModule } from 'src/firebase/firebase.module';
 import { UsersModule } from 'src/users/users.module';
 import { AuthModule } from 'src/auth/auth.module';
 import { SharedModule } from 'src/shared/shared.module';
-// import { QueueModule } from './queue/queue.module';
+import { QueueModule } from './queue/queue.module';
 import { ProductsModule } from 'src/product/product.module';
-// import { OrderModule } from './orders/order.module';
+import { AttributesModule } from './attributes/attributes.module';
+import { CategoriesModule } from './categories/categories.module';
+import { OrdersModule } from './orders/orders.module';
 // import { PaymentModule } from './payments/payment.module';
 import { CartModule } from './cart/cart.module';
+import { GuestSessionModule } from './guest-session/guest-session.module';
 // import { ReviewModule } from './reviews/review.module';
 // import { NotificationModule } from './notifications/notification.module';
 
@@ -36,10 +39,15 @@ const ServerModules = [
 const FeatureModules = [
   FirebaseModule,
   CartModule,
+  GuestSessionModule,
   UsersModule,
   AuthModule,
   SharedModule,
+  QueueModule,
+  AttributesModule,
+  CategoriesModule,
   ProductsModule,
+  OrdersModule,
 ];
 
 @Module({

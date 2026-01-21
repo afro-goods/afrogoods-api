@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CartController } from './cart.controller';
 import { CartService } from './cart.service';
+import { CartMergeService } from './services/cart-merge.service';
 import { Cart, CartSchema } from './schemas/cart.schema';
 import { Product, ProductSchema } from 'src/product/schemas/product.schema';
 
@@ -13,7 +14,7 @@ import { Product, ProductSchema } from 'src/product/schemas/product.schema';
     ]),
   ],
   controllers: [CartController],
-  providers: [CartService],
-  exports: [CartService],
+  providers: [CartService, CartMergeService],
+  exports: [CartService, CartMergeService],
 })
 export class CartModule {}

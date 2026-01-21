@@ -1,0 +1,993 @@
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
+import { InjectModel, InjectConnection } from '@nestjs/mongoose';
+import { Model, Types, Connection, ClientSession } from 'mongoose';
+
+import { Order, OrderDocument } from './schemas/orders.schema';
+import { GuestOrder, GuestOrderDocument } from './schemas/guest-order.schema';
+import { Cart, CartDocument } from '../cart/schemas/cart.schema';
+import { Product, ProductDocument } from '../product/schemas/product.schema';
+
+import { OrderStatus } from './enums/order-status.enum';
+import { generateOrderId } from '../utilities/generateId/orderId';
+import { inTransaction } from '../utilities/transaction';
+import { GuestCheckoutDto } from './dto/guest-checkout.dto';
+import {
+  AdminOrderSearchDto,
+  AdminOrderResponseDto,
+  AdminOrderListResponseDto,
+} from './dto/admin-order-search.dto';
+import { OrdersEmailService } from './services/orders-email.service';
+import { UpdateShippingAddressDto } from './dto/update-shipping-address.dto';
+import { PaginationService } from '../shared/services/pagination/services/pagination.service';
+import type { PaginationResult } from '../shared/services/pagination/interfaces/pagination.interface';
+
+@Injectable()
+export class OrdersService {
+  constructor(
+    @InjectConnection() private readonly connection: Connection,
+    @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
+    @InjectModel(GuestOrder.name)
+    private readonly guestOrderModel: Model<GuestOrderDocument>,
+    @InjectModel(Cart.name)
+    private readonly cartModel: Model<CartDocument>,
+    @InjectModel(Product.name)
+    private readonly productModel: Model<ProductDocument>,
+    private readonly ordersEmailService: OrdersEmailService,
+    private readonly paginationService: PaginationService,
+  ) {}
+
+  // ============================================================
+  // BUSINESS RULES CONFIGURATION
+  // ============================================================
+
+  private readonly MODIFIABLE_STATUSES: OrderStatus[] = [
+    OrderStatus.PENDING,
+    OrderStatus.CONFIRMED,
+    OrderStatus.PAID,
+  ];
+
+  private readonly CANCELLABLE_STATUSES: OrderStatus[] = [
+    OrderStatus.PENDING,
+    OrderStatus.CONFIRMED,
+    OrderStatus.PAID,
+  ];
+
+  private readonly STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+    [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+    [OrderStatus.CONFIRMED]: [OrderStatus.PROCESSING, OrderStatus.CANCELLED],
+    [OrderStatus.PAID]: [OrderStatus.PROCESSING, OrderStatus.CANCELLED],
+    [OrderStatus.PROCESSING]: [OrderStatus.SHIPPED, OrderStatus.CANCELLED],
+    [OrderStatus.SHIPPED]: [
+      OrderStatus.OUT_FOR_DELIVERY,
+      OrderStatus.DELIVERED,
+    ],
+    [OrderStatus.OUT_FOR_DELIVERY]: [OrderStatus.DELIVERED],
+    [OrderStatus.DELIVERED]: [OrderStatus.REFUNDED],
+    [OrderStatus.CANCELLED]: [],
+    [OrderStatus.REFUNDED]: [],
+  };
+
+  // ============================================================
+  // PRIVATE HELPER METHODS
+  // ============================================================
+
+  private canModify(status: OrderStatus): boolean {
+    return this.MODIFIABLE_STATUSES.includes(status);
+  }
+
+  private canCancel(status: OrderStatus): boolean {
+    return this.CANCELLABLE_STATUSES.includes(status);
+  }
+
+  private isValidTransition(from: OrderStatus, to: OrderStatus): boolean {
+    return this.STATUS_TRANSITIONS[from]?.includes(to) ?? false;
+  }
+
+  private async validateAndGetCartItems(
+    cart: CartDocument,
+    session?: ClientSession,
+  ) {
+    const productIds = cart.items
+      .map((item) =>
+        Types.ObjectId.isValid(item.productId as any)
+          ? new Types.ObjectId(item.productId)
+          : null,
+      )
+      .filter(Boolean) as Types.ObjectId[];
+
+    if (!productIds.length) {
+      throw new BadRequestException(
+        'All products in your cart are no longer available',
+      );
+    }
+
+    const products = await this.productModel
+      .find({ _id: { $in: productIds }, availabilityStatus: 'In Stock' })
+      .select('_id stock')
+      .session(session || null)
+      .lean();
+
+    if (!products.length) {
+      throw new BadRequestException(
+        'All products in your cart are no longer available',
+      );
+    }
+
+    const productStockMap = new Map(
+      products.map((p) => [p._id.toString(), p.stock]),
+    );
+    const validItems: typeof cart.items = [];
+    const outOfStockItems: Array<{
+      productId: string;
+      requested: number;
+      available: number;
+    }> = [];
+
+    for (const item of cart.items) {
+      const productId = item.productId.toString();
+      const availableStock = productStockMap.get(productId);
+
+      if (availableStock === undefined) continue;
+      if (availableStock < item.quantity) {
+        outOfStockItems.push({
+          productId,
+          requested: item.quantity,
+          available: availableStock,
+        });
+        continue;
+      }
+      validItems.push(item);
+    }
+
+    if (outOfStockItems.length > 0) {
+      throw new BadRequestException(
+        `Insufficient stock: ${outOfStockItems.map((i) => `${i.productId} (need ${i.requested}, have ${i.available})`).join(', ')}`,
+      );
+    }
+
+    if (!validItems.length) {
+      throw new BadRequestException(
+        'All products in your cart are no longer available',
+      );
+    }
+
+    return validItems;
+  }
+
+  private async reduceStock(
+    items: Array<{ productId: any; quantity: number }>,
+    session?: ClientSession,
+  ) {
+    for (const item of items) {
+      await this.productModel.updateOne(
+        { _id: item.productId },
+        { $inc: { stock: -item.quantity } },
+        { session },
+      );
+    }
+  }
+
+  private async restoreStock(
+    items: Array<{ productId: any; quantity: number }>,
+    session?: ClientSession,
+  ) {
+    for (const item of items) {
+      await this.productModel.updateOne(
+        { _id: item.productId },
+        { $inc: { stock: item.quantity } },
+        { session },
+      );
+    }
+  }
+
+  // ============================================================
+  // CUSTOMER OPERATIONS
+  // ============================================================
+
+  /** Create order from cart for registered user (with transaction) */
+  async createOrder(userId: string): Promise<OrderDocument> {
+    return inTransaction(this.connection, async (session) => {
+      const cart = await this.cartModel.findOne({ userId }).session(session);
+      if (!cart || cart.items.length === 0) {
+        throw new BadRequestException('Cart is empty');
+      }
+
+      const validItems = await this.validateAndGetCartItems(cart, session);
+      await this.reduceStock(validItems, session);
+
+      const [order] = await this.orderModel.create(
+        [
+          {
+            orderId: generateOrderId(),
+            userId: new Types.ObjectId(userId),
+            items: validItems.map((item) => ({
+              productId: new Types.ObjectId(item.productId),
+              quantity: item.quantity,
+              priceAtPurchase: item.priceAtAddedTime,
+            })),
+            totalAmount: cart.totalAmount,
+            status: OrderStatus.PENDING,
+            isPaid: false,
+            notes: [],
+            statusHistory: [
+              {
+                status: OrderStatus.PENDING,
+                reason: 'Order created',
+                updatedBy: 'system',
+                createdAt: new Date(),
+              },
+            ],
+          },
+        ],
+        { session },
+      );
+
+      cart.items = [];
+      cart.totalAmount = 0;
+      await cart.save({ session });
+
+      return order;
+    });
+  }
+
+  /** Get all orders for a registered user (paginated) */
+  async getMyOrders(
+    userId: string,
+    page = 1,
+    limit = 20,
+  ): Promise<PaginationResult<Order>> {
+    return this.paginationService.paginate(this.orderModel, {
+      page,
+      limit,
+      filter: { userId },
+      sort: { createdAt: -1 },
+    });
+  }
+
+  /** Get single order for a registered user */
+  async getOrderById(orderId: string, userId: string): Promise<OrderDocument> {
+    const order = await this.orderModel.findOne({ orderId, userId });
+    if (!order) throw new NotFoundException('Order not found');
+    return order;
+  }
+
+  /** Cancel order for registered user (with transaction) */
+  async cancelOrder(
+    orderId: string,
+    userId: string,
+    reason?: string,
+  ): Promise<OrderDocument> {
+    return inTransaction(this.connection, async (session) => {
+      const order = await this.orderModel
+        .findOne({ orderId, userId })
+        .session(session);
+      if (!order) throw new NotFoundException('Order not found');
+      if (!this.canCancel(order.status)) {
+        throw new BadRequestException(
+          `Cannot cancel order with status: ${order.status}`,
+        );
+      }
+
+      const previousStatus = order.status;
+      order.status = OrderStatus.CANCELLED;
+      order.cancelledAt = new Date();
+      order.cancellationReason = reason;
+      order.statusHistory.push({
+        status: OrderStatus.CANCELLED,
+        previousStatus,
+        reason: reason || 'Order cancelled by customer',
+        updatedBy: userId,
+        createdAt: new Date(),
+      });
+      order.notes.push({
+        content: `Order cancelled${reason ? `: ${reason}` : ''}`,
+        source: 'system',
+        authorId: userId,
+        visibleToCustomer: true,
+        createdAt: new Date(),
+      });
+
+      await this.restoreStock(order.items, session);
+      return order.save({ session });
+    });
+  }
+
+  /** Update shipping address for registered user */
+  async updateShippingAddress(
+    orderId: string,
+    userId: string,
+    updateDto: UpdateShippingAddressDto,
+  ) {
+    const order = await this.orderModel.findOne({ orderId, userId });
+    if (!order) throw new NotFoundException('Order not found');
+    if (!this.canModify(order.status)) {
+      throw new BadRequestException(
+        `Cannot update shipping address for order with status: ${order.status}`,
+      );
+    }
+
+    order.shippingAddress = updateDto.shippingAddress;
+    order.notes.push({
+      content: `Shipping address updated${updateDto.reason ? `: ${updateDto.reason}` : ''}`,
+      source: 'system',
+      authorId: userId,
+      visibleToCustomer: true,
+      createdAt: new Date(),
+    });
+
+    await order.save();
+    return {
+      success: true,
+      orderId: order.orderId,
+      message: 'Shipping address updated successfully',
+      updatedAddress: order.shippingAddress,
+    };
+  }
+
+  /** Add note to order for registered user */
+  async addCustomerNote(
+    orderId: string,
+    userId: string,
+    content: string,
+  ): Promise<OrderDocument> {
+    const order = await this.orderModel.findOne({ orderId, userId });
+    if (!order) throw new NotFoundException('Order not found');
+    if (!this.canModify(order.status)) {
+      throw new BadRequestException(
+        `Cannot add notes to order with status: ${order.status}`,
+      );
+    }
+
+    order.notes.push({
+      content,
+      source: 'customer',
+      authorId: userId,
+      visibleToCustomer: true,
+      createdAt: new Date(),
+    });
+    return order.save();
+  }
+
+  /** Mock payment for testing */
+  async mockPay(orderId: string, userId: string): Promise<OrderDocument> {
+    const order = await this.getOrderById(orderId, userId);
+    if (order.isPaid) throw new BadRequestException('Order already paid');
+
+    order.isPaid = true;
+    order.status = OrderStatus.PAID;
+    return order.save();
+  }
+
+  // ============================================================
+  // GUEST OPERATIONS
+  // ============================================================
+
+  /** Create guest order (with transaction) */
+  async createGuestOrder(dto: GuestCheckoutDto): Promise<GuestOrderDocument> {
+    return inTransaction(this.connection, async (session) => {
+      const cart = await this.cartModel
+        .findOne({ guestSessionId: dto.sessionId })
+        .session(session);
+      if (!cart || cart.items.length === 0) {
+        throw new BadRequestException('Cart is empty');
+      }
+
+      const validItems = await this.validateAndGetCartItems(cart, session);
+      await this.reduceStock(validItems, session);
+
+      const [guestOrder] = await this.guestOrderModel.create(
+        [
+          {
+            orderId: generateOrderId(),
+            sessionId: dto.sessionId,
+            customerInfo: dto.customerInfo,
+            shippingAddress: dto.shippingAddress,
+            billingAddress: dto.billingAddress,
+            items: validItems.map((item) => ({
+              productId: new Types.ObjectId(item.productId),
+              quantity: item.quantity,
+              priceAtPurchase: item.priceAtAddedTime,
+            })),
+            totalAmount: cart.totalAmount,
+            status: OrderStatus.PENDING,
+            isPaid: false,
+            notes: [],
+            statusHistory: [
+              {
+                status: OrderStatus.PENDING,
+                reason: 'Guest order created',
+                updatedBy: 'system',
+                createdAt: new Date(),
+              },
+            ],
+          },
+        ],
+        { session },
+      );
+
+      cart.items = [];
+      cart.totalAmount = 0;
+      await cart.save({ session });
+
+      return guestOrder;
+    });
+  }
+
+  /** Track guest order by orderId and email */
+  async trackGuestOrder(
+    orderId: string,
+    email: string,
+  ): Promise<GuestOrderDocument> {
+    const guestOrder = await this.guestOrderModel.findOne({
+      orderId,
+      'customerInfo.email': email,
+    });
+    if (!guestOrder) throw new NotFoundException('Order not found');
+    return guestOrder;
+  }
+
+  /** Cancel guest order (with transaction) */
+  async cancelGuestOrder(
+    orderId: string,
+    email: string,
+    reason?: string,
+  ): Promise<GuestOrderDocument> {
+    return inTransaction(this.connection, async (session) => {
+      const guestOrder = await this.guestOrderModel
+        .findOne({ orderId, 'customerInfo.email': email })
+        .session(session);
+      if (!guestOrder) throw new NotFoundException('Order not found');
+      if (!this.canCancel(guestOrder.status)) {
+        throw new BadRequestException(
+          `Cannot cancel order with status: ${guestOrder.status}`,
+        );
+      }
+
+      const previousStatus = guestOrder.status;
+      guestOrder.status = OrderStatus.CANCELLED;
+      guestOrder.cancelledAt = new Date();
+      guestOrder.cancellationReason = reason;
+      guestOrder.statusHistory.push({
+        status: OrderStatus.CANCELLED,
+        previousStatus,
+        reason: reason || 'Order cancelled by guest',
+        updatedBy: 'guest',
+        createdAt: new Date(),
+      });
+      guestOrder.notes.push({
+        content: `Order cancelled${reason ? `: ${reason}` : ''}`,
+        source: 'system',
+        visibleToCustomer: true,
+        createdAt: new Date(),
+      });
+
+      await this.restoreStock(guestOrder.items, session);
+      return guestOrder.save({ session });
+    });
+  }
+
+  /** Update shipping address for guest order */
+  async updateGuestShippingAddress(
+    orderId: string,
+    email: string,
+    updateDto: UpdateShippingAddressDto,
+  ) {
+    const guestOrder = await this.guestOrderModel.findOne({
+      orderId,
+      'customerInfo.email': email,
+    });
+    if (!guestOrder) throw new NotFoundException('Order not found');
+    if (!this.canModify(guestOrder.status)) {
+      throw new BadRequestException(
+        `Cannot update shipping address for order with status: ${guestOrder.status}`,
+      );
+    }
+
+    guestOrder.shippingAddress = updateDto.shippingAddress;
+    guestOrder.notes.push({
+      content: `Shipping address updated${updateDto.reason ? `: ${updateDto.reason}` : ''}`,
+      source: 'system',
+      visibleToCustomer: true,
+      createdAt: new Date(),
+    });
+
+    await guestOrder.save();
+    return {
+      success: true,
+      orderId: guestOrder.orderId,
+      message: 'Shipping address updated successfully',
+      updatedAddress: guestOrder.shippingAddress,
+    };
+  }
+
+  /** Add note to guest order */
+  async addGuestNote(
+    orderId: string,
+    email: string,
+    content: string,
+  ): Promise<GuestOrderDocument> {
+    const guestOrder = await this.guestOrderModel.findOne({
+      orderId,
+      'customerInfo.email': email,
+    });
+    if (!guestOrder) throw new NotFoundException('Order not found');
+    if (!this.canModify(guestOrder.status)) {
+      throw new BadRequestException(
+        `Cannot add notes to order with status: ${guestOrder.status}`,
+      );
+    }
+
+    guestOrder.notes.push({
+      content,
+      source: 'customer',
+      visibleToCustomer: true,
+      createdAt: new Date(),
+    });
+    return guestOrder.save();
+  }
+
+  // ============================================================
+  // ADMIN OPERATIONS
+  // ============================================================
+
+  /** Get all orders - registered users only (paginated) */
+  async getAllOrders(page = 1, limit = 20): Promise<PaginationResult<Order>> {
+    return this.paginationService.paginate(this.orderModel, {
+      page,
+      limit,
+      sort: { createdAt: -1 },
+    });
+  }
+
+  /** Get all orders including guest orders (paginated) */
+  async getAllOrdersIncludingGuest(page = 1, limit = 20) {
+    const [regularResult, guestResult] = await Promise.all([
+      this.paginationService.paginate(this.orderModel, {
+        page,
+        limit,
+        sort: { createdAt: -1 },
+      }),
+      this.paginationService.paginate(this.guestOrderModel, {
+        page,
+        limit,
+        sort: { createdAt: -1 },
+      }),
+    ]);
+
+    const allOrders = [
+      ...regularResult.data.map((o) => ({ ...o, isGuestOrder: false })),
+      ...guestResult.data.map((o) => ({ ...o, isGuestOrder: true })),
+    ].sort(
+      (a, b) =>
+        new Date((b as any).createdAt).getTime() -
+        new Date((a as any).createdAt).getTime(),
+    );
+
+    return {
+      data: allOrders.slice(0, limit),
+      total: regularResult.total + guestResult.total,
+      page,
+      limit,
+      totalPages: Math.ceil((regularResult.total + guestResult.total) / limit),
+      hasNext:
+        page < Math.ceil((regularResult.total + guestResult.total) / limit),
+      hasPrev: page > 1,
+    };
+  }
+
+  /** Search orders with filters */
+  async searchOrders(
+    searchDto: AdminOrderSearchDto,
+  ): Promise<AdminOrderListResponseDto> {
+    const {
+      orderId,
+      email,
+      phone,
+      customerName,
+      status,
+      startDate,
+      endDate,
+      guestOrdersOnly,
+      registeredOrdersOnly,
+      page = 1,
+      limit = 20,
+    } = searchDto;
+    const skip = (page - 1) * limit;
+
+    const dateFilter: any = {};
+    if (startDate) dateFilter['$gte'] = new Date(startDate);
+    if (endDate) dateFilter['$lte'] = new Date(endDate);
+
+    const baseFilter: any = {
+      ...(status && { status }),
+      ...(Object.keys(dateFilter).length > 0 && { createdAt: dateFilter }),
+    };
+
+    let regularOrders: any[] = [];
+    if (!guestOrdersOnly) {
+      regularOrders = await this.orderModel
+        .find({
+          ...baseFilter,
+          ...(orderId && { orderId: { $regex: orderId, $options: 'i' } }),
+        })
+        .populate('userId', 'firstName lastName email phone')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+    }
+
+    let guestOrders: any[] = [];
+    if (!registeredOrdersOnly) {
+      guestOrders = await this.guestOrderModel
+        .find({
+          ...baseFilter,
+          ...(orderId && { orderId: { $regex: orderId, $options: 'i' } }),
+          ...(email && {
+            'customerInfo.email': { $regex: email, $options: 'i' },
+          }),
+          ...(phone && {
+            'customerInfo.phone': { $regex: phone, $options: 'i' },
+          }),
+          ...(customerName && {
+            $or: [
+              {
+                'customerInfo.firstName': {
+                  $regex: customerName,
+                  $options: 'i',
+                },
+              },
+              {
+                'customerInfo.lastName': {
+                  $regex: customerName,
+                  $options: 'i',
+                },
+              },
+            ],
+          }),
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+    }
+
+    const transformOrder = (
+      order: any,
+      isGuest: boolean,
+    ): AdminOrderResponseDto => ({
+      orderId: order.orderId,
+      status: order.status,
+      totalAmount: order.totalAmount,
+      isPaid: order.isPaid,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt,
+      isGuestOrder: isGuest,
+      customer: isGuest
+        ? {
+            name: `${order.customerInfo.firstName} ${order.customerInfo.lastName}`,
+            email: order.customerInfo.email,
+            phone: order.customerInfo.phone,
+          }
+        : {
+            id: order.userId?._id?.toString(),
+            name: order.userId
+              ? `${order.userId.firstName} ${order.userId.lastName}`
+              : 'Unknown',
+            email: order.userId?.email || 'No email',
+            phone: order.userId?.phone,
+          },
+      itemsCount: order.items?.length || 0,
+      items: (order.items || []).map((item: any) => ({
+        productId: item.productId.toString(),
+        quantity: item.quantity,
+        priceAtPurchase: item.priceAtPurchase,
+      })),
+      ...(isGuest && { shippingAddress: order.shippingAddress }),
+    });
+
+    const allOrders = [
+      ...regularOrders.map((o) => transformOrder(o, false)),
+      ...guestOrders.map((o) => transformOrder(o, true)),
+    ]
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )
+      .slice(0, limit);
+
+    const [regularCount, guestCount] = await Promise.all([
+      guestOrdersOnly ? 0 : this.orderModel.countDocuments(baseFilter),
+      registeredOrdersOnly
+        ? 0
+        : this.guestOrderModel.countDocuments(baseFilter),
+    ]);
+
+    return {
+      orders: allOrders,
+      pagination: {
+        page,
+        limit,
+        total: regularCount + guestCount,
+        totalPages: Math.ceil((regularCount + guestCount) / limit),
+      },
+    };
+  }
+
+  /** Get order details for admin */
+  async getOrderDetailsForAdmin(
+    orderId: string,
+  ): Promise<AdminOrderResponseDto | null> {
+    const regularOrder = await this.orderModel
+      .findOne({ orderId })
+      .populate('userId', 'firstName lastName email phone')
+      .lean();
+    if (regularOrder) {
+      return {
+        orderId: regularOrder.orderId,
+        status: regularOrder.status,
+        totalAmount: regularOrder.totalAmount,
+        isPaid: regularOrder.isPaid,
+        createdAt: (regularOrder as any).createdAt,
+        updatedAt: (regularOrder as any).updatedAt,
+        isGuestOrder: false,
+        customer: {
+          id: (regularOrder as any).userId?._id?.toString(),
+          name: (regularOrder as any).userId
+            ? `${(regularOrder as any).userId.firstName} ${(regularOrder as any).userId.lastName}`
+            : 'Unknown',
+          email: (regularOrder as any).userId?.email || 'No email',
+          phone: (regularOrder as any).userId?.phone,
+        },
+        itemsCount: regularOrder.items?.length || 0,
+        items: (regularOrder.items || []).map((item: any) => ({
+          productId: item.productId.toString(),
+          quantity: item.quantity,
+          priceAtPurchase: item.priceAtPurchase,
+        })),
+      };
+    }
+
+    const guestOrder = await this.guestOrderModel.findOne({ orderId }).lean();
+    if (guestOrder) {
+      return {
+        orderId: guestOrder.orderId,
+        status: guestOrder.status,
+        totalAmount: guestOrder.totalAmount,
+        isPaid: guestOrder.isPaid,
+        createdAt: (guestOrder as any).createdAt,
+        updatedAt: (guestOrder as any).updatedAt,
+        isGuestOrder: true,
+        customer: {
+          name: `${guestOrder.customerInfo.firstName} ${guestOrder.customerInfo.lastName}`,
+          email: guestOrder.customerInfo.email,
+          phone: guestOrder.customerInfo.phone,
+        },
+        itemsCount: guestOrder.items?.length || 0,
+        items: (guestOrder.items || []).map((item: any) => ({
+          productId: item.productId.toString(),
+          quantity: item.quantity,
+          priceAtPurchase: item.priceAtPurchase,
+        })),
+        shippingAddress: guestOrder.shippingAddress,
+      };
+    }
+
+    return null;
+  }
+
+  /** Update order status (admin) */
+  async updateOrderStatus(
+    orderId: string,
+    status: OrderStatus,
+    updatedBy?: string,
+    reason?: string,
+  ): Promise<OrderDocument> {
+    const order = await this.orderModel.findOne({ orderId });
+    if (!order) throw new NotFoundException('Order not found');
+
+    const previousStatus = order.status;
+    if (!this.isValidTransition(previousStatus, status)) {
+      throw new BadRequestException(
+        `Invalid status transition from ${previousStatus} to ${status}`,
+      );
+    }
+
+    order.status = status;
+    order.statusHistory.push({
+      status,
+      previousStatus,
+      reason: reason || 'Status updated by admin',
+      updatedBy: updatedBy || 'admin',
+      createdAt: new Date(),
+    });
+    return order.save();
+  }
+
+  /** Update guest order status (admin) */
+  async updateGuestOrderStatus(
+    orderId: string,
+    status: OrderStatus,
+    updatedBy?: string,
+    reason?: string,
+  ): Promise<GuestOrderDocument> {
+    const guestOrder = await this.guestOrderModel.findOne({ orderId });
+    if (!guestOrder) throw new NotFoundException('Guest order not found');
+
+    const previousStatus = guestOrder.status;
+    if (!this.isValidTransition(previousStatus, status)) {
+      throw new BadRequestException(
+        `Invalid status transition from ${previousStatus} to ${status}`,
+      );
+    }
+
+    guestOrder.status = status;
+    guestOrder.statusHistory.push({
+      status,
+      previousStatus,
+      reason: reason || 'Status updated by admin',
+      updatedBy: updatedBy || 'admin',
+      createdAt: new Date(),
+    });
+    return guestOrder.save();
+  }
+
+  /** Add admin note to any order */
+  async addAdminNote(
+    orderId: string,
+    adminId: string,
+    content: string,
+    visibleToCustomer = false,
+  ): Promise<OrderDocument | GuestOrderDocument> {
+    const order = await this.orderModel.findOne({ orderId });
+    if (order) {
+      order.notes.push({
+        content,
+        source: 'admin',
+        authorId: adminId,
+        visibleToCustomer,
+        createdAt: new Date(),
+      });
+      return order.save();
+    }
+
+    const guestOrder = await this.guestOrderModel.findOne({ orderId });
+    if (guestOrder) {
+      guestOrder.notes.push({
+        content,
+        source: 'admin',
+        authorId: adminId,
+        visibleToCustomer,
+        createdAt: new Date(),
+      });
+      return guestOrder.save();
+    }
+
+    throw new NotFoundException('Order not found');
+  }
+
+  /** Get all notes for an order (admin view) */
+  async getAllOrderNotes(orderId: string) {
+    const order = await this.orderModel.findOne({ orderId });
+    if (order) return order.notes;
+
+    const guestOrder = await this.guestOrderModel.findOne({ orderId });
+    if (guestOrder) return guestOrder.notes;
+
+    throw new NotFoundException('Order not found');
+  }
+
+  /** Get status history for an order */
+  async getStatusHistory(orderId: string) {
+    const order = await this.orderModel.findOne({ orderId });
+    if (order) return order.statusHistory;
+
+    const guestOrder = await this.guestOrderModel.findOne({ orderId });
+    if (guestOrder) return guestOrder.statusHistory;
+
+    throw new NotFoundException('Order not found');
+  }
+
+  /** Update guest order status with email notification */
+  async updateGuestOrderStatusWithNotification(
+    orderId: string,
+    newStatus: OrderStatus,
+    adminMessage?: string,
+    trackingNumber?: string,
+  ): Promise<GuestOrderDocument> {
+    const guestOrder = await this.guestOrderModel.findOne({ orderId });
+    if (!guestOrder) throw new NotFoundException('Guest order not found');
+
+    const previousStatus = guestOrder.status;
+    if (!this.isValidTransition(previousStatus, newStatus)) {
+      throw new BadRequestException(
+        `Invalid status transition from ${previousStatus} to ${newStatus}`,
+      );
+    }
+
+    guestOrder.status = newStatus;
+    guestOrder.statusHistory.push({
+      status: newStatus,
+      previousStatus,
+      reason: adminMessage || 'Status updated by admin',
+      updatedBy: 'admin',
+      createdAt: new Date(),
+    });
+
+    const updatedOrder = await guestOrder.save();
+
+    await this.ordersEmailService.sendOrderStatusUpdateEmail(
+      guestOrder.customerInfo.email,
+      orderId,
+      {
+        customerName: `${guestOrder.customerInfo.firstName} ${guestOrder.customerInfo.lastName}`,
+        previousStatus,
+        newStatus,
+        adminMessage,
+        trackingNumber,
+        totalAmount: guestOrder.totalAmount,
+        orderTrackingUrl: `${process.env.FRONTEND_URL}/track-order?orderId=${orderId}&email=${guestOrder.customerInfo.email}`,
+      },
+    );
+
+    return updatedOrder;
+  }
+
+  /** Find guest orders by email (paginated) */
+  async findGuestOrdersByEmail(
+    email: string,
+    page = 1,
+    limit = 20,
+  ): Promise<PaginationResult<GuestOrder>> {
+    return this.paginationService.paginate(this.guestOrderModel, {
+      page,
+      limit,
+      filter: { 'customerInfo.email': { $regex: email, $options: 'i' } },
+      sort: { createdAt: -1 },
+    });
+  }
+
+  /** Find guest orders by phone (paginated) */
+  async findGuestOrdersByPhone(
+    phone: string,
+    page = 1,
+    limit = 20,
+  ): Promise<PaginationResult<GuestOrder>> {
+    return this.paginationService.paginate(this.guestOrderModel, {
+      page,
+      limit,
+      filter: { 'customerInfo.phone': { $regex: phone, $options: 'i' } },
+      sort: { createdAt: -1 },
+    });
+  }
+
+  /** Get guest order fulfillment info */
+  async getGuestOrderFulfillmentInfo(orderId: string) {
+    const guestOrder = await this.guestOrderModel.findOne({ orderId }).lean();
+    if (!guestOrder) throw new NotFoundException('Guest order not found');
+
+    return {
+      orderId: guestOrder.orderId,
+      status: guestOrder.status,
+      isPaid: guestOrder.isPaid,
+      customerInfo: guestOrder.customerInfo,
+      shippingAddress: guestOrder.shippingAddress,
+      billingAddress: guestOrder.billingAddress,
+      items: guestOrder.items,
+      totalAmount: guestOrder.totalAmount,
+      createdAt: (guestOrder as any).createdAt,
+      updatedAt: (guestOrder as any).updatedAt,
+      fulfillmentNotes: {
+        requiresShipping: true,
+        customerType: 'guest',
+        contactEmail: guestOrder.customerInfo.email,
+        contactPhone: guestOrder.customerInfo.phone,
+        shippingLabel: `${guestOrder.customerInfo.firstName} ${guestOrder.customerInfo.lastName}\n${guestOrder.shippingAddress.street}\n${guestOrder.shippingAddress.city}, ${guestOrder.shippingAddress.state} ${guestOrder.shippingAddress.postalCode}\n${guestOrder.shippingAddress.country}`,
+      },
+    };
+  }
+}

@@ -1,19 +1,14 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Product } from './schemas/product.schema';
-import { Category } from './schemas/category.schema';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { CreateCategoryDto } from './dto/create-category.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { PaginationService } from 'src/shared/services/pagination/services/pagination.service';
 import { MediaService } from 'src/shared/services/media/services/media.service';
+import { AttributesService } from '../attributes/attributes.service';
+import { CategoriesService } from '../categories/categories.service';
 import { inTransaction } from 'src/utilities/transaction';
 import { cleanBase64 } from 'src/utilities/files';
 import { Connection } from 'mongoose';
@@ -25,145 +20,104 @@ export class ProductsService {
     private readonly connection: Connection,
     @InjectModel(Product.name)
     private productModel: Model<Product>,
-    @InjectModel(Category.name)
-    private categoryModel: Model<Category>,
     private readonly paginationService: PaginationService,
     private readonly mediaService: MediaService,
+    private readonly attributesService: AttributesService,
+    private readonly categoriesService: CategoriesService,
   ) {}
-
-  // ---------- CATEGORY ----------
-  async createCategory(dto: CreateCategoryDto) {
-    return await inTransaction(this.connection, async (session) => {
-      try {
-        const { name, description, isActive = true } = dto;
-
-        const existingCategory = await this.categoryModel
-          .findOne({ name: new RegExp(`^${name}$`, 'i') })
-          .session(session);
-
-        if (existingCategory) {
-          throw new ConflictException('Category with this name already exists');
-        }
-
-        const [category] = await this.categoryModel.create(
-          [
-            {
-              name,
-              description,
-              isActive,
-            },
-          ],
-          { session },
-        );
-
-        return category;
-      } catch (error) {
-        if (error.code === 11000) {
-          throw new ConflictException('Category with this name already exists');
-        }
-
-        if (error instanceof ConflictException) {
-          throw error;
-        }
-
-        throw new BadRequestException('Failed to create category');
-      }
-    });
-  }
-
-  async findAllCategories() {
-    return this.categoryModel
-      .find({ isActive: true })
-      .select('name description isActive')
-      .sort({ name: 1 })
-      .lean()
-      .exec();
-  }
-
-  async deleteCategory(id: string) {
-    return await inTransaction(this.connection, async (session) => {
-      const category = await this.categoryModel.findById(id).session(session);
-      if (!category) {
-        throw new NotFoundException('Category not found');
-      }
-
-      const productCount = await this.productModel
-        .countDocuments({ category: id })
-        .session(session);
-
-      if (productCount > 0) {
-        throw new ConflictException(
-          `Cannot delete category. ${productCount} product(s) are using it.`,
-        );
-      }
-
-      await this.categoryModel.findByIdAndDelete(id).session(session);
-
-      return { message: 'Category deleted successfully' };
-    });
-  }
 
   // ---------- PRODUCT ----------
   async createProduct(dto: CreateProductDto) {
     return await inTransaction(this.connection, async (session) => {
-      try {
-        const category = await this.categoryModel
-          .findById(dto.category)
-          .session(session);
-        if (!category) throw new NotFoundException('Category not found');
-        if (!category.isActive)
-          throw new ConflictException('Category is inactive');
+      // Validate category exists using categories service
+      const categoryExists = await this.categoriesService.checkCategoryExists(
+        dto.category,
+      );
+      if (!categoryExists) {
+        throw new NotFoundException('Category not found or inactive');
+      }
 
-        let imageUrls: string[] = [];
+      let imageUrls: string[] = [];
 
-        if (dto.images && dto.images.length > 0) {
-          const uploadPromises = dto.images.map(async (img) => {
-            const base64Data = cleanBase64(img.uri);
-            if (!base64Data) return null;
+      if (dto.images && dto.images.length > 0) {
+        const uploadPromises = dto.images.map(async (img) => {
+          const base64Data = cleanBase64(img.uri);
+          if (!base64Data) return null;
 
-            const buffer = Buffer.from(base64Data, 'base64');
+          const buffer = Buffer.from(base64Data, 'base64');
 
-            const result = await this.mediaService.uploadFile(buffer, {
-              folder: 'products',
-              resourceType: 'image',
-            });
-
-            return result.secure_url;
+          const result = await this.mediaService.uploadFile(buffer, {
+            folder: 'products',
+            resourceType: 'image',
           });
 
-          const urls = (await Promise.all(uploadPromises)).filter(
-            Boolean,
-          ) as string[];
-          imageUrls = urls;
-        }
+          return result.secure_url;
+        });
 
-        const [product] = await this.productModel.create(
-          [
-            {
-              ...dto,
-              images: imageUrls,
-              category: dto.category,
-            },
-          ],
-          { session },
-        );
-
-        await product.populate('category', 'name description isActive');
-
-        return product;
-      } catch (error) {
-        console.warn(
-          'Product creation failed — uploaded images remain in Cloudinary (no public_id stored)',
-        );
-        throw error;
+        const urls = (await Promise.all(uploadPromises)).filter(
+          Boolean,
+        ) as string[];
+        imageUrls = urls;
       }
+
+      const productData: any = {
+        name: dto.name,
+        description: dto.description,
+        category: new Types.ObjectId(dto.category),
+        price: dto.price,
+        stock: dto.stock,
+        currency: 'CAD', // Default currency
+        images: imageUrls,
+        availabilityStatus: dto.availabilityStatus || 'In Stock',
+        brand: dto.brand,
+        weight: dto.weight,
+        isFrozen: dto.isFrozen,
+        isOrganic: dto.isOrganic,
+        tags: dto.tags || [],
+      };
+
+      const [product] = await this.productModel.create([productData], {
+        session,
+      });
+
+      // Create attributes using attributes service
+      let attributeIds: Types.ObjectId[] = [];
+      if (dto.attributes && dto.attributes.length > 0) {
+        const createdAttributes =
+          await this.attributesService.createProductAttributes(
+            product._id,
+            dto.attributes,
+            session,
+          );
+        attributeIds = createdAttributes.map((attr) => attr._id);
+      }
+
+      // Update product with attribute references
+      if (attributeIds.length > 0) {
+        await this.productModel.findByIdAndUpdate(
+          product._id,
+          { attributes: attributeIds },
+          { session, new: true },
+        );
+      }
+
+      // Populate and return
+      const populatedProduct = await this.productModel
+        .findById(product._id)
+        .populate('category', 'name description isActive')
+        .populate('attributes')
+        .session(session);
+
+      return populatedProduct;
     });
   }
 
   async findAllProducts(query: ProductQueryDto) {
     const { page, limit, search, category, sort } = query;
 
-    const filter: any = { isActive: true };
+    const filter: any = {
+      availabilityStatus: { $in: ['Draft', 'Out of Stock', 'In Stock'] },
+    };
 
     if (search) {
       filter.$or = [
@@ -176,7 +130,7 @@ export class ProductsService {
       filter.category = category;
     }
 
-    return this.paginationService.paginate(this.productModel, {
+    const result = await this.paginationService.paginate(this.productModel, {
       page,
       limit,
       filter,
@@ -186,8 +140,48 @@ export class ProductsService {
           : sort === '-price'
             ? { price: -1 }
             : { createdAt: -1 },
-      populate: { path: 'category', select: 'name' },
+      populate: [
+        { path: 'category', select: 'name description isActive' },
+        { path: 'attributes' },
+      ],
     });
+
+    return result;
+  }
+
+  async findAllProductsIncludingArchived(query: ProductQueryDto) {
+    const { page, limit, search, category, sort } = query;
+
+    const filter: any = {};
+
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    if (category) {
+      filter.category = category;
+    }
+
+    const result = await this.paginationService.paginate(this.productModel, {
+      page,
+      limit,
+      filter,
+      sort:
+        sort === 'price'
+          ? { price: 1 }
+          : sort === '-price'
+            ? { price: -1 }
+            : { createdAt: -1 },
+      populate: [
+        { path: 'category', select: 'name description isActive' },
+        { path: 'attributes' },
+      ],
+    });
+
+    return result;
   }
 
   async findProductById(id: string) {
@@ -201,64 +195,101 @@ export class ProductsService {
       throw new NotFoundException('Product not found');
     }
 
-    return product;
+    // Get product attributes separately
+    const attributes = await this.attributesService.getProductAttributes(id);
+
+    return {
+      ...product,
+      attributeDetails: attributes,
+    };
   }
 
   async updateProduct(id: string, dto: UpdateProductDto) {
     return await inTransaction(this.connection, async (session) => {
-      try {
-        const product = await this.productModel.findById(id).session(session);
+      const product = await this.productModel.findById(id).session(session);
 
-        if (!product) {
-          throw new NotFoundException('Product not found');
+      if (!product) {
+        throw new NotFoundException('Product not found');
+      }
+
+      // Validate category if being updated
+      if (dto.category) {
+        const categoryExists = await this.categoriesService.checkCategoryExists(
+          dto.category,
+        );
+        if (!categoryExists) {
+          throw new NotFoundException('Category not found or inactive');
         }
+      }
 
-        const { images, ...fieldsToUpdate } = dto;
+      const { images, attributes, ...fieldsToUpdate } = dto;
 
-        let imageUrlsToSave = product.images;
+      let imageUrlsToSave = product.images;
 
-        if (images !== undefined) {
-          if (images.length === 0) {
-            imageUrlsToSave = [];
-          } else {
-            const uploadPromises = images.map(async (img) => {
-              const base64Data = cleanBase64(img.uri);
-              if (!base64Data) return null;
+      if (images !== undefined) {
+        if (images.length === 0) {
+          imageUrlsToSave = [];
+        } else {
+          const uploadPromises = images.map(async (img) => {
+            const base64Data = cleanBase64(img.uri);
+            if (!base64Data) return null;
 
-              const buffer = Buffer.from(base64Data, 'base64');
+            const buffer = Buffer.from(base64Data, 'base64');
 
-              const result = await this.mediaService.uploadFile(buffer, {
-                folder: 'products',
-                resourceType: 'image',
-              });
-
-              return result.secure_url;
+            const result = await this.mediaService.uploadFile(buffer, {
+              folder: 'products',
+              resourceType: 'image',
             });
 
-            const uploadedUrls = (await Promise.all(uploadPromises)).filter(
-              Boolean,
-            ) as string[];
+            return result.secure_url;
+          });
 
-            imageUrlsToSave = uploadedUrls;
-          }
+          const uploadedUrls = (await Promise.all(uploadPromises)).filter(
+            Boolean,
+          ) as string[];
+
+          imageUrlsToSave = uploadedUrls;
         }
-
-        const updatedProduct = await this.productModel
-          .findByIdAndUpdate(
-            id,
-            {
-              ...fieldsToUpdate,
-              images: imageUrlsToSave,
-            },
-            { new: true, session },
-          )
-          .populate('category', 'name description isActive');
-
-        return updatedProduct;
-      } catch (error) {
-        console.warn('Product update failed');
-        throw error;
       }
+
+      // Update attributes if provided
+      let attributeIds = product.attributes;
+      if (attributes !== undefined) {
+        if (attributes.length === 0) {
+          // Delete all attributes
+          await this.attributesService.deleteProductAttributes(
+            product._id,
+            session,
+          );
+          attributeIds = [];
+        } else {
+          // Update attributes
+          const updatedAttributes =
+            await this.attributesService.updateProductAttributes(
+              product._id,
+              attributes,
+              session,
+            );
+          attributeIds = updatedAttributes.map((attr) => attr._id);
+        }
+      }
+
+      const updateData: any = {
+        ...fieldsToUpdate,
+        images: imageUrlsToSave,
+        attributes: attributeIds,
+      };
+
+      if (dto.category) {
+        updateData.category = new Types.ObjectId(dto.category);
+      }
+
+      const updatedProduct = await this.productModel
+        .findByIdAndUpdate(id, updateData, { new: true, session })
+        .populate('category', 'name description isActive')
+        .populate('attributes');
+
+      return updatedProduct;
     });
   }
 
@@ -269,6 +300,12 @@ export class ProductsService {
       if (!product) {
         throw new NotFoundException('Product not found');
       }
+
+      // Delete associated attributes
+      await this.attributesService.deleteProductAttributes(
+        product._id,
+        session,
+      );
 
       await this.productModel.findByIdAndDelete(id).session(session);
 

@@ -4,37 +4,37 @@ import { UserRole } from '../interfaces/user.interface';
 
 @Schema({ timestamps: true })
 export class User extends Document {
-  @Prop({ required: true, unique: true })
+  @Prop({ type: String, required: true, unique: true })
   firebaseUid: string;
 
-  @Prop({ required: true, unique: true, lowercase: true })
+  @Prop({ type: String, required: true, unique: true, lowercase: true })
   email: string;
 
-  @Prop({ required: true })
+  @Prop({ type: String, required: true })
   firstName: string;
 
-  @Prop({ required: true })
+  @Prop({ type: String, required: true })
   lastName: string;
 
-  @Prop()
+  @Prop({ type: String })
   address?: string;
 
-  @Prop({ unique: true, sparse: true })
+  @Prop({ type: String, unique: true, sparse: true })
   username?: string;
 
-  @Prop()
+  @Prop({ type: String })
   photoUrl?: string;
 
-  @Prop()
+  @Prop({ type: String })
   phoneNumber?: string;
 
   @Prop({ type: String, enum: UserRole, default: UserRole.USER })
   role: UserRole;
 
-  @Prop({ default: false })
+  @Prop({ type: Boolean, default: false })
   emailVerified: boolean;
 
-  @Prop()
+  @Prop({ type: Date })
   lastLogin?: Date;
 
   @Prop({ type: Object })

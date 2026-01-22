@@ -71,6 +71,18 @@ export class OrdersService {
     [OrderStatus.REFUNDED]: [],
   };
 
+  private readonly DEFAULT_STATUS_REASONS: Record<OrderStatus, string> = {
+    [OrderStatus.PENDING]: 'Order placed',
+    [OrderStatus.CONFIRMED]: 'Order confirmed by admin',
+    [OrderStatus.PAID]: 'Payment received',
+    [OrderStatus.PROCESSING]: 'Order is being processed',
+    [OrderStatus.SHIPPED]: 'Order has been shipped',
+    [OrderStatus.OUT_FOR_DELIVERY]: 'Order is out for delivery',
+    [OrderStatus.DELIVERED]: 'Order delivered successfully',
+    [OrderStatus.CANCELLED]: 'Order cancelled',
+    [OrderStatus.REFUNDED]: 'Order refunded',
+  };
+
   // ============================================================
   // PRIVATE HELPER METHODS
   // ============================================================
@@ -867,6 +879,38 @@ export class OrdersService {
       createdAt: new Date(),
     });
     return guestOrder.save();
+  }
+
+  /** Update any order status (regular or guest) with smart default reasons */
+  async updateAnyOrderStatus(
+    orderId: string,
+    status: OrderStatus,
+    updatedBy: string,
+    reason?: string,
+  ): Promise<OrderDocument | GuestOrderDocument> {
+    const finalReason =
+      reason ||
+      this.DEFAULT_STATUS_REASONS[status] ||
+      'Status updated by admin';
+
+    // Try regular order first
+    const order = await this.orderModel.findOne({ orderId });
+    if (order) {
+      return this.updateOrderStatus(orderId, status, updatedBy, finalReason);
+    }
+
+    // Try guest order
+    const guestOrder = await this.guestOrderModel.findOne({ orderId });
+    if (guestOrder) {
+      return this.updateGuestOrderStatus(
+        orderId,
+        status,
+        updatedBy,
+        finalReason,
+      );
+    }
+
+    throw new NotFoundException('Order not found');
   }
 
   /** Add admin note to any order */

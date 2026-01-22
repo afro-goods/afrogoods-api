@@ -99,7 +99,7 @@ export class OrdersController {
   }
 
   // ============================================================
-  // GUEST ENDPOINTS (3)
+  // GUEST ENDPOINTS (5)
   // ============================================================
 
   /** POST /orders/guest - Create guest order */
@@ -130,16 +130,42 @@ export class OrdersController {
     );
   }
 
+  /** PATCH /orders/guest/:id/shipping-address - Update guest shipping address */
+  @Patch('guest/:id/shipping-address')
+  updateGuestShippingAddress(
+    @Param('id') orderId: string,
+    @Body() body: { email: string } & UpdateShippingAddressDto,
+  ) {
+    return this.ordersService.updateGuestShippingAddress(
+      orderId,
+      body.email,
+      body,
+    );
+  }
+
+  /** POST /orders/guest/:id/notes - Add note to guest order */
+  @Post('guest/:id/notes')
+  addGuestNote(
+    @Param('id') orderId: string,
+    @Body() noteDto: { email: string; content: string },
+  ) {
+    return this.ordersService.addGuestNote(
+      orderId,
+      noteDto.email,
+      noteDto.content,
+    );
+  }
+
   // ============================================================
   // ADMIN ENDPOINTS (5) - Requires Admin Role
   // ============================================================
 
-  /** GET /orders/admin/all - List all orders (paginated) */
+  /** GET /orders/admin/all - List all orders including guest orders (paginated) */
   @Get('admin/all')
   @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   getAllOrders(@Query('page') page?: string, @Query('limit') limit?: string) {
-    return this.ordersService.getAllOrders(
+    return this.ordersService.getAllOrdersIncludingGuest(
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
     );
@@ -166,12 +192,37 @@ export class OrdersController {
     return orderDetails;
   }
 
-  /** PATCH /orders/admin/order/:id/status - Update order status */
+  /** PATCH /orders/admin/order/:id/status - Update order status (handles both regular and guest orders) */
   @Patch('admin/order/:id/status')
   @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
-  updateStatus(@Param('id') id: string, @Body('status') status: OrderStatus) {
-    return this.ordersService.updateOrderStatus(id, status);
+  updateStatus(
+    @Param('id') id: string,
+    @Body() body: { status: OrderStatus; reason?: string },
+    @CurrentUser('_id') adminId: string,
+  ) {
+    return this.ordersService.updateAnyOrderStatus(
+      id,
+      body.status,
+      adminId,
+      body.reason,
+    );
+  }
+
+  /** GET /orders/admin/order/:id/notes - Get all notes for an order */
+  @Get('admin/order/:id/notes')
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  getOrderNotes(@Param('id') orderId: string) {
+    return this.ordersService.getAllOrderNotes(orderId);
+  }
+
+  /** GET /orders/admin/order/:id/history - Get status history for an order */
+  @Get('admin/order/:id/history')
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  getStatusHistory(@Param('id') orderId: string) {
+    return this.ordersService.getStatusHistory(orderId);
   }
 
   /** POST /orders/admin/order/:id/notes - Add admin note */

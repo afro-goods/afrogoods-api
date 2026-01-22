@@ -230,6 +230,11 @@ export class OrdersService {
       cart.totalAmount = 0;
       await cart.save({ session });
 
+      await order.populate([
+        { path: 'userId', select: 'firstName lastName email phone' },
+        { path: 'items.productId', select: 'name price images' },
+      ]);
+
       return order;
     });
   }
@@ -245,12 +250,15 @@ export class OrdersService {
       limit,
       filter: { userId },
       sort: { createdAt: -1 },
+      populate: [{ path: 'items.productId', select: 'name price images' }],
     });
   }
 
   /** Get single order for a registered user */
   async getOrderById(orderId: string, userId: string): Promise<OrderDocument> {
-    const order = await this.orderModel.findOne({ orderId, userId });
+    const order = await this.orderModel
+      .findOne({ orderId, userId })
+      .populate('items.productId', 'name price images');
     if (!order) throw new NotFoundException('Order not found');
     return order;
   }
@@ -413,6 +421,8 @@ export class OrdersService {
       cart.totalAmount = 0;
       await cart.save({ session });
 
+      await guestOrder.populate('items.productId', 'name price images');
+
       return guestOrder;
     });
   }
@@ -422,10 +432,12 @@ export class OrdersService {
     orderId: string,
     email: string,
   ): Promise<GuestOrderDocument> {
-    const guestOrder = await this.guestOrderModel.findOne({
-      orderId,
-      'customerInfo.email': email,
-    });
+    const guestOrder = await this.guestOrderModel
+      .findOne({
+        orderId,
+        'customerInfo.email': email,
+      })
+      .populate('items.productId', 'name price images');
     if (!guestOrder) throw new NotFoundException('Order not found');
     return guestOrder;
   }
@@ -540,6 +552,10 @@ export class OrdersService {
       page,
       limit,
       sort: { createdAt: -1 },
+      populate: [
+        { path: 'userId', select: 'firstName lastName email phone' },
+        { path: 'items.productId', select: 'name price images' },
+      ],
     });
   }
 
@@ -550,11 +566,16 @@ export class OrdersService {
         page,
         limit,
         sort: { createdAt: -1 },
+        populate: [
+          { path: 'userId', select: 'firstName lastName email phone' },
+          { path: 'items.productId', select: 'name price images' },
+        ],
       }),
       this.paginationService.paginate(this.guestOrderModel, {
         page,
         limit,
         sort: { createdAt: -1 },
+        populate: [{ path: 'items.productId', select: 'name price images' }],
       }),
     ]);
 
@@ -615,6 +636,7 @@ export class OrdersService {
           ...(orderId && { orderId: { $regex: orderId, $options: 'i' } }),
         })
         .populate('userId', 'firstName lastName email phone')
+        .populate('items.productId', 'name price images')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -650,6 +672,7 @@ export class OrdersService {
             ],
           }),
         })
+        .populate('items.productId', 'name price images')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -725,6 +748,7 @@ export class OrdersService {
     const regularOrder = await this.orderModel
       .findOne({ orderId })
       .populate('userId', 'firstName lastName email phone')
+      .populate('items.productId', 'name price images')
       .lean();
     if (regularOrder) {
       return {
@@ -745,14 +769,20 @@ export class OrdersService {
         },
         itemsCount: regularOrder.items?.length || 0,
         items: (regularOrder.items || []).map((item: any) => ({
-          productId: item.productId.toString(),
+          productId:
+            item.productId?._id?.toString() || item.productId?.toString(),
+          productName: item.productId?.name,
+          productImage: item.productId?.images?.[0],
           quantity: item.quantity,
           priceAtPurchase: item.priceAtPurchase,
         })),
       };
     }
 
-    const guestOrder = await this.guestOrderModel.findOne({ orderId }).lean();
+    const guestOrder = await this.guestOrderModel
+      .findOne({ orderId })
+      .populate('items.productId', 'name price images')
+      .lean();
     if (guestOrder) {
       return {
         orderId: guestOrder.orderId,
@@ -769,7 +799,10 @@ export class OrdersService {
         },
         itemsCount: guestOrder.items?.length || 0,
         items: (guestOrder.items || []).map((item: any) => ({
-          productId: item.productId.toString(),
+          productId:
+            item.productId?._id?.toString() || item.productId?.toString(),
+          productName: item.productId?.name,
+          productImage: item.productId?.images?.[0],
           quantity: item.quantity,
           priceAtPurchase: item.priceAtPurchase,
         })),
@@ -948,6 +981,7 @@ export class OrdersService {
       limit,
       filter: { 'customerInfo.email': { $regex: email, $options: 'i' } },
       sort: { createdAt: -1 },
+      populate: [{ path: 'items.productId', select: 'name price images' }],
     });
   }
 
@@ -962,12 +996,16 @@ export class OrdersService {
       limit,
       filter: { 'customerInfo.phone': { $regex: phone, $options: 'i' } },
       sort: { createdAt: -1 },
+      populate: [{ path: 'items.productId', select: 'name price images' }],
     });
   }
 
   /** Get guest order fulfillment info */
   async getGuestOrderFulfillmentInfo(orderId: string) {
-    const guestOrder = await this.guestOrderModel.findOne({ orderId }).lean();
+    const guestOrder = await this.guestOrderModel
+      .findOne({ orderId })
+      .populate('items.productId', 'name price images')
+      .lean();
     if (!guestOrder) throw new NotFoundException('Guest order not found');
 
     return {

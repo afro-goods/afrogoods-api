@@ -101,12 +101,12 @@ export class PaymentProcessor extends WorkerHost {
 
   @OnWorkerEvent('completed')
   onCompleted(job: Job) {
-    this.logger.verbose(`✅ Payment job ${job.id} completed`);
+    this.logger.verbose(`Payment job ${job.id} completed`);
   }
 
   @OnWorkerEvent('failed')
   onFailed(job: Job, err: Error) {
-    this.logger.error(`❌ Payment job ${job.id} failed: ${err.message}`);
+    this.logger.error(` Payment job ${job.id} failed: ${err.message}`);
 
     // Notify user about payment failure
     // await this.emailQueueService.sendPaymentFailedEmail(job.data.userId);
@@ -114,6 +114,6 @@ export class PaymentProcessor extends WorkerHost {
 
   @OnWorkerEvent('active')
   onActive(job: Job) {
-    this.logger.debug(`🔄 Payment job ${job.id} is processing`);
+    this.logger.debug(` Payment job ${job.id} is processing`);
   }
 }

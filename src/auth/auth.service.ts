@@ -7,7 +7,9 @@ import {
 } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 import { UsersService } from '../users/users.service';
+import { EmailQueueService } from '../queue/services/email-queue.service';
 import { RegisterDto } from './dto/register.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { UserRole } from 'src/users/interfaces/user.interface';
 import { LoginDto } from './dto/login.dto';
 
@@ -16,6 +18,7 @@ export class AuthService {
   constructor(
     @Inject('FIREBASE_ADMIN') private firebaseAdmin: typeof admin,
     private usersService: UsersService,
+    private emailQueueService: EmailQueueService,
   ) {}
 
   async register(registerDto: RegisterDto, firebaseUid: string) {
@@ -97,5 +100,29 @@ export class AuthService {
       }
       throw new UnauthorizedException('Invalid token');
     }
+  }
+
+  /**
+   * Request password reset: find user by email, generate Firebase reset link, send email.
+   * Always returns success to avoid leaking whether the email exists.
+   */
+  async requestPasswordReset(dto: ForgotPasswordDto): Promise<{ message: string }> {
+    const user = await this.usersService.findByUsernameOrEmail(dto.email);
+    if (!user || !user.email || user.email.toLowerCase() !== dto.email.toLowerCase()) {
+      return { message: 'If an account exists with this email, you will receive a password reset link.' };
+    }
+
+    try {
+      const resetLink = await this.firebaseAdmin.auth().generatePasswordResetLink(dto.email);
+      const name = user.firstName || 'there';
+      await this.emailQueueService.sendPasswordResetEmail({
+        email: user.email,
+        token: resetLink,
+        name,
+      });
+    } catch {
+      // Don't leak errors; return same message
+    }
+    return { message: 'If an account exists with this email, you will receive a password reset link.' };
   }
 }

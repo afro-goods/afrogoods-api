@@ -166,12 +166,20 @@ export class OrdersController {
     return orderDetails;
   }
 
-  /** PATCH /orders/admin/order/:id/status - Update order status */
+  /** PATCH /orders/admin/order/:id/status - Update order status (sends email to customer) */
   @Patch('admin/order/:id/status')
   @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
-  updateStatus(@Param('id') id: string, @Body('status') status: OrderStatus) {
-    return this.ordersService.updateOrderStatus(id, status);
+  updateStatus(
+    @Param('id') id: string,
+    @Body() body: { status: OrderStatus; adminMessage?: string; trackingNumber?: string },
+  ) {
+    return this.ordersService.updateOrderOrGuestStatusWithNotification(
+      id,
+      body.status,
+      body.adminMessage,
+      body.trackingNumber,
+    );
   }
 
   /** POST /orders/admin/order/:id/notes - Add admin note */

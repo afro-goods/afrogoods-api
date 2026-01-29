@@ -24,6 +24,7 @@ import { OrdersEmailService } from './services/orders-email.service';
 import { UpdateShippingAddressDto } from './dto/update-shipping-address.dto';
 import { PaginationService } from '../shared/services/pagination/services/pagination.service';
 import type { PaginationResult } from '../shared/services/pagination/interfaces/pagination.interface';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class OrdersService {
@@ -38,6 +39,7 @@ export class OrdersService {
     private readonly productModel: Model<ProductDocument>,
     private readonly ordersEmailService: OrdersEmailService,
     private readonly paginationService: PaginationService,
+    private readonly usersService: UsersService,
   ) {}
 
   // ============================================================
@@ -190,7 +192,7 @@ export class OrdersService {
 
   /** Create order from cart for registered user (with transaction) */
   async createOrder(userId: string): Promise<OrderDocument> {
-    return inTransaction(this.connection, async (session) => {
+    const order = await inTransaction(this.connection, async (session) => {
       const cart = await this.cartModel.findOne({ userId }).session(session);
       if (!cart || cart.items.length === 0) {
         throw new BadRequestException('Cart is empty');
@@ -199,7 +201,7 @@ export class OrdersService {
       const validItems = await this.validateAndGetCartItems(cart, session);
       await this.reduceStock(validItems, session);
 
-      const [order] = await this.orderModel.create(
+      const [createdOrder] = await this.orderModel.create(
         [
           {
             orderId: generateOrderId(),
@@ -230,8 +232,24 @@ export class OrdersService {
       cart.totalAmount = 0;
       await cart.save({ session });
 
-      return order;
+      return createdOrder;
     });
+
+    try {
+      const user = await this.usersService.findById(userId);
+      await this.ordersEmailService.sendOrderConfirmationEmail(
+        user.email,
+        order.orderId,
+        {
+          totalAmount: order.totalAmount,
+          itemCount: order.items.length,
+          customerName: `${user.firstName} ${user.lastName}`,
+        },
+      );
+    } catch {
+      // Don't fail order creation if email fails
+    }
+    return order;
   }
 
   /** Get all orders for a registered user (paginated) */
@@ -261,29 +279,29 @@ export class OrdersService {
     userId: string,
     reason?: string,
   ): Promise<OrderDocument> {
-    return inTransaction(this.connection, async (session) => {
-      const order = await this.orderModel
+    const order = await inTransaction(this.connection, async (session) => {
+      const orderDoc = await this.orderModel
         .findOne({ orderId, userId })
         .session(session);
-      if (!order) throw new NotFoundException('Order not found');
-      if (!this.canCancel(order.status)) {
+      if (!orderDoc) throw new NotFoundException('Order not found');
+      if (!this.canCancel(orderDoc.status)) {
         throw new BadRequestException(
-          `Cannot cancel order with status: ${order.status}`,
+          `Cannot cancel order with status: ${orderDoc.status}`,
         );
       }
 
-      const previousStatus = order.status;
-      order.status = OrderStatus.CANCELLED;
-      order.cancelledAt = new Date();
-      order.cancellationReason = reason;
-      order.statusHistory.push({
+      const previousStatus = orderDoc.status;
+      orderDoc.status = OrderStatus.CANCELLED;
+      orderDoc.cancelledAt = new Date();
+      orderDoc.cancellationReason = reason;
+      orderDoc.statusHistory.push({
         status: OrderStatus.CANCELLED,
         previousStatus,
         reason: reason || 'Order cancelled by customer',
         updatedBy: userId,
         createdAt: new Date(),
       });
-      order.notes.push({
+      orderDoc.notes.push({
         content: `Order cancelled${reason ? `: ${reason}` : ''}`,
         source: 'system',
         authorId: userId,
@@ -291,9 +309,27 @@ export class OrdersService {
         createdAt: new Date(),
       });
 
-      await this.restoreStock(order.items, session);
-      return order.save({ session });
+      await this.restoreStock(orderDoc.items, session);
+      return orderDoc.save({ session });
     });
+
+    try {
+      const user = await this.usersService.findById(userId);
+      await this.ordersEmailService.sendCancellationConfirmationEmail(
+        user.email,
+        orderId,
+        {
+          customerName: `${user.firstName} ${user.lastName}`,
+          refundAmount: 0,
+          refundTimeline: 'Not applicable',
+          cancellationReason: reason || 'Order cancelled by customer',
+          orderTotal: order.totalAmount,
+        },
+      );
+    } catch {
+      // Don't fail cancellation if email fails
+    }
+    return order;
   }
 
   /** Update shipping address for registered user */
@@ -368,7 +404,7 @@ export class OrdersService {
 
   /** Create guest order (with transaction) */
   async createGuestOrder(dto: GuestCheckoutDto): Promise<GuestOrderDocument> {
-    return inTransaction(this.connection, async (session) => {
+    const guestOrder = await inTransaction(this.connection, async (session) => {
       const cart = await this.cartModel
         .findOne({ guestSessionId: dto.sessionId })
         .session(session);
@@ -379,7 +415,7 @@ export class OrdersService {
       const validItems = await this.validateAndGetCartItems(cart, session);
       await this.reduceStock(validItems, session);
 
-      const [guestOrder] = await this.guestOrderModel.create(
+      const [createdGuestOrder] = await this.guestOrderModel.create(
         [
           {
             orderId: generateOrderId(),
@@ -413,8 +449,24 @@ export class OrdersService {
       cart.totalAmount = 0;
       await cart.save({ session });
 
-      return guestOrder;
+      return createdGuestOrder;
     });
+
+    try {
+      const { email, firstName, lastName } = guestOrder.customerInfo;
+      await this.ordersEmailService.sendOrderConfirmationEmail(
+        email,
+        guestOrder.orderId,
+        {
+          totalAmount: guestOrder.totalAmount,
+          itemCount: guestOrder.items.length,
+          customerName: `${firstName} ${lastName}`,
+        },
+      );
+    } catch {
+      // Don't fail order creation if email fails
+    }
+    return guestOrder;
   }
 
   /** Track guest order by orderId and email */
@@ -436,38 +488,56 @@ export class OrdersService {
     email: string,
     reason?: string,
   ): Promise<GuestOrderDocument> {
-    return inTransaction(this.connection, async (session) => {
-      const guestOrder = await this.guestOrderModel
+    const guestOrder = await inTransaction(this.connection, async (session) => {
+      const guestOrderDoc = await this.guestOrderModel
         .findOne({ orderId, 'customerInfo.email': email })
         .session(session);
-      if (!guestOrder) throw new NotFoundException('Order not found');
-      if (!this.canCancel(guestOrder.status)) {
+      if (!guestOrderDoc) throw new NotFoundException('Order not found');
+      if (!this.canCancel(guestOrderDoc.status)) {
         throw new BadRequestException(
-          `Cannot cancel order with status: ${guestOrder.status}`,
+          `Cannot cancel order with status: ${guestOrderDoc.status}`,
         );
       }
 
-      const previousStatus = guestOrder.status;
-      guestOrder.status = OrderStatus.CANCELLED;
-      guestOrder.cancelledAt = new Date();
-      guestOrder.cancellationReason = reason;
-      guestOrder.statusHistory.push({
+      const previousStatus = guestOrderDoc.status;
+      guestOrderDoc.status = OrderStatus.CANCELLED;
+      guestOrderDoc.cancelledAt = new Date();
+      guestOrderDoc.cancellationReason = reason;
+      guestOrderDoc.statusHistory.push({
         status: OrderStatus.CANCELLED,
         previousStatus,
         reason: reason || 'Order cancelled by guest',
         updatedBy: 'guest',
         createdAt: new Date(),
       });
-      guestOrder.notes.push({
+      guestOrderDoc.notes.push({
         content: `Order cancelled${reason ? `: ${reason}` : ''}`,
         source: 'system',
         visibleToCustomer: true,
         createdAt: new Date(),
       });
 
-      await this.restoreStock(guestOrder.items, session);
-      return guestOrder.save({ session });
+      await this.restoreStock(guestOrderDoc.items, session);
+      return guestOrderDoc.save({ session });
     });
+
+    try {
+      const { firstName, lastName } = guestOrder.customerInfo;
+      await this.ordersEmailService.sendCancellationConfirmationEmail(
+        guestOrder.customerInfo.email,
+        orderId,
+        {
+          customerName: `${firstName} ${lastName}`,
+          refundAmount: 0,
+          refundTimeline: 'Not applicable',
+          cancellationReason: reason || 'Order cancelled by guest',
+          orderTotal: guestOrder.totalAmount,
+        },
+      );
+    } catch {
+      // Don't fail cancellation if email fails
+    }
+    return guestOrder;
   }
 
   /** Update shipping address for guest order */
@@ -780,12 +850,13 @@ export class OrdersService {
     return null;
   }
 
-  /** Update order status (admin) */
+  /** Update order status (admin) - sends status update email to customer */
   async updateOrderStatus(
     orderId: string,
     status: OrderStatus,
     updatedBy?: string,
     reason?: string,
+    trackingNumber?: string,
   ): Promise<OrderDocument> {
     const order = await this.orderModel.findOne({ orderId });
     if (!order) throw new NotFoundException('Order not found');
@@ -805,7 +876,62 @@ export class OrdersService {
       updatedBy: updatedBy || 'admin',
       createdAt: new Date(),
     });
-    return order.save();
+    const savedOrder = await order.save();
+
+    try {
+      const user = await this.usersService.findById(order.userId.toString());
+      const frontendUrl = process.env.FRONTEND_URL || '';
+      await this.ordersEmailService.sendOrderStatusUpdateEmail(
+        user.email,
+        orderId,
+        {
+          customerName: `${user.firstName} ${user.lastName}`,
+          previousStatus,
+          newStatus: status,
+          adminMessage: reason,
+          trackingNumber,
+          totalAmount: order.totalAmount,
+          orderTrackingUrl: frontendUrl
+            ? `${frontendUrl}/orders?orderId=${orderId}`
+            : undefined,
+        },
+      );
+    } catch {
+      // Don't fail status update if email fails
+    }
+    return savedOrder;
+  }
+
+  /**
+   * Update order or guest order status (admin) with email notification.
+   * Tries registered user order first, then guest order.
+   */
+  async updateOrderOrGuestStatusWithNotification(
+    orderId: string,
+    status: OrderStatus,
+    adminMessage?: string,
+    trackingNumber?: string,
+  ): Promise<OrderDocument | GuestOrderDocument> {
+    const order = await this.orderModel.findOne({ orderId });
+    if (order) {
+      return this.updateOrderStatus(
+        orderId,
+        status,
+        undefined,
+        adminMessage,
+        trackingNumber,
+      );
+    }
+    const guestOrder = await this.guestOrderModel.findOne({ orderId });
+    if (guestOrder) {
+      return this.updateGuestOrderStatusWithNotification(
+        orderId,
+        status,
+        adminMessage,
+        trackingNumber,
+      );
+    }
+    throw new NotFoundException('Order not found');
   }
 
   /** Update guest order status (admin) */

@@ -74,6 +74,11 @@ export class ProductsService {
         isFrozen: dto.isFrozen,
         isOrganic: dto.isOrganic,
         tags: dto.tags || [],
+        deliveryTimeUnit: dto.deliveryTimeUnit,
+        deliveryMinTime: dto.deliveryMinTime,
+        deliveryMaxTime: dto.deliveryMaxTime,
+        deliveryNote: dto.deliveryNote,
+        requiresScheduledDelivery: dto.requiresScheduledDelivery ?? false,
       };
 
       const [product] = await this.productModel.create([productData], {

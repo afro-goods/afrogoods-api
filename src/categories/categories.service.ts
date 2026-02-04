@@ -8,8 +8,11 @@ import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Model, Connection, Types } from 'mongoose';
 import { Category, CategoryDocument } from './schemas/category.schema';
 import { Product, ProductDocument } from '../product/schemas/product.schema';
+import { Advert, AdvertDocument } from '../adverts/schemas/advert.schema';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { CategoryQueryDto } from './dto/category-query.dto';
+import { CategoryType } from './enums/category-type.enum';
 import { inTransaction } from 'src/utilities/transaction';
 
 @Injectable()
@@ -21,19 +24,32 @@ export class CategoriesService {
     private categoryModel: Model<CategoryDocument>,
     @InjectModel(Product.name)
     private productModel: Model<ProductDocument>,
+    @InjectModel(Advert.name)
+    private advertModel: Model<AdvertDocument>,
   ) {}
 
   async create(dto: CreateCategoryDto): Promise<CategoryDocument> {
     return await inTransaction(this.connection, async (session) => {
       try {
-        const { name, description, isActive = true } = dto;
+        const {
+          name,
+          description,
+          isActive = true,
+          type = CategoryType.PRODUCT,
+        } = dto;
 
+        // Check for unique name within the same type (case-insensitive)
         const existingCategory = await this.categoryModel
-          .findOne({ name: new RegExp(`^${name}$`, 'i') })
+          .findOne({
+            name: new RegExp(`^${name}$`, 'i'),
+            type,
+          })
           .session(session);
 
         if (existingCategory) {
-          throw new ConflictException('Category with this name already exists');
+          throw new ConflictException(
+            `A ${type} category with this name already exists`,
+          );
         }
 
         const [category] = await this.categoryModel.create(
@@ -42,6 +58,7 @@ export class CategoriesService {
               name,
               description,
               isActive,
+              type,
             },
           ],
           { session },
@@ -50,7 +67,9 @@ export class CategoriesService {
         return category;
       } catch (error) {
         if (error.code === 11000) {
-          throw new ConflictException('Category with this name already exists');
+          throw new ConflictException(
+            'Category with this name already exists for this type',
+          );
         }
 
         if (error instanceof ConflictException) {
@@ -62,10 +81,17 @@ export class CategoriesService {
     });
   }
 
-  async findAll(): Promise<CategoryDocument[]> {
+  async findAll(query?: CategoryQueryDto): Promise<CategoryDocument[]> {
+    const filter: Record<string, unknown> = { isActive: true };
+
+    // Filter by type when provided
+    if (query?.type) {
+      filter.type = query.type;
+    }
+
     return this.categoryModel
-      .find({ isActive: true })
-      .select('name description isActive')
+      .find(filter)
+      .select('name description isActive type')
       .sort({ name: 1 })
       .lean()
       .exec();
@@ -90,15 +116,19 @@ export class CategoriesService {
       }
 
       if (dto.name && dto.name !== category.name) {
+        // Check for unique name within the same type (case-insensitive)
         const existingCategory = await this.categoryModel
           .findOne({
             name: new RegExp(`^${dto.name}$`, 'i'),
+            type: category.type,
             _id: { $ne: id },
           })
           .session(session);
 
         if (existingCategory) {
-          throw new ConflictException('Category with this name already exists');
+          throw new ConflictException(
+            `A ${category.type} category with this name already exists`,
+          );
         }
       }
 
@@ -122,14 +152,30 @@ export class CategoriesService {
         throw new NotFoundException('Category not found');
       }
 
-      const productCount = await this.productModel
-        .countDocuments({ category: new Types.ObjectId(id) })
-        .session(session);
+      // Check for associated products (for product categories)
+      if (category.type === CategoryType.PRODUCT) {
+        const productCount = await this.productModel
+          .countDocuments({ category: new Types.ObjectId(id) })
+          .session(session);
 
-      if (productCount > 0) {
-        throw new ConflictException(
-          `Cannot delete category "${category.name}" because it has ${productCount} associated product(s). Please move or delete the products first.`,
-        );
+        if (productCount > 0) {
+          throw new ConflictException(
+            `Cannot delete category "${category.name}" because it has ${productCount} associated product(s). Please move or delete the products first.`,
+          );
+        }
+      }
+
+      // Check for associated adverts (for advert categories)
+      if (category.type === CategoryType.ADVERT) {
+        const advertCount = await this.advertModel
+          .countDocuments({ category: new Types.ObjectId(id) })
+          .session(session);
+
+        if (advertCount > 0) {
+          throw new ConflictException(
+            `Cannot delete category "${category.name}" because it has ${advertCount} associated advert(s). Please move or delete the adverts first.`,
+          );
+        }
       }
 
       await this.categoryModel.findByIdAndDelete(id).session(session);
@@ -138,13 +184,35 @@ export class CategoriesService {
     });
   }
 
-  async checkCategoryExists(id: string): Promise<boolean> {
+  /**
+   * Check if a category exists and is active.
+   * @param id - The category ID to check
+   * @param type - Optional type to validate the category is of the expected type
+   * @returns true if the category exists, is active, and matches the type (if provided)
+   */
+  async checkCategoryExists(id: string, type?: CategoryType): Promise<boolean> {
     const category = await this.categoryModel.findById(id).lean().exec();
-    return !!category && category.isActive;
+
+    if (!category || !category.isActive) {
+      return false;
+    }
+
+    // If type is provided, validate the category is of the expected type
+    if (type && category.type !== type) {
+      return false;
+    }
+
+    return true;
   }
 
   async getProductCount(categoryId: string): Promise<number> {
     return this.productModel
+      .countDocuments({ category: new Types.ObjectId(categoryId) })
+      .exec();
+  }
+
+  async getAdvertCount(categoryId: string): Promise<number> {
+    return this.advertModel
       .countDocuments({ category: new Types.ObjectId(categoryId) })
       .exec();
   }
@@ -154,7 +222,7 @@ export class CategoriesService {
   ): Promise<
     { productCount: number } & Pick<
       CategoryDocument,
-      'name' | 'description' | 'isActive' | '_id'
+      'name' | 'description' | 'isActive' | '_id' | 'type'
     >
   > {
     const category = await this.findById(id);
@@ -165,6 +233,7 @@ export class CategoriesService {
       name: category.name,
       description: category.description,
       isActive: category.isActive,
+      type: category.type,
       productCount,
     };
   }

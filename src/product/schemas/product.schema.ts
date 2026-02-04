@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { AvailabilityStatus } from '../enums/availabilty-status.enum';
+import { DeliveryTimeUnit } from '../enums/delivery-time-unit.enum';
 
 @Schema({ timestamps: true })
 export class Product {
@@ -49,6 +50,22 @@ export class Product {
 
   @Prop({ type: [Types.ObjectId], ref: 'ProductAttribute', default: [] })
   attributes: Types.ObjectId[];
+
+  // Delivery timeline fields
+  @Prop({ type: String, enum: DeliveryTimeUnit })
+  deliveryTimeUnit?: DeliveryTimeUnit;
+
+  @Prop({ type: Number, min: 1 })
+  deliveryMinTime?: number;
+
+  @Prop({ type: Number, min: 1 })
+  deliveryMaxTime?: number;
+
+  @Prop({ type: String, maxlength: 500 })
+  deliveryNote?: string;
+
+  @Prop({ type: Boolean, default: false })
+  requiresScheduledDelivery: boolean;
 }
 
 export type ProductDocument = Product & Document;

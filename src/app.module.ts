@@ -18,9 +18,9 @@ import { ProductsModule } from 'src/product/product.module';
 import { AttributesModule } from './attributes/attributes.module';
 import { CategoriesModule } from './categories/categories.module';
 import { OrdersModule } from './orders/orders.module';
+import { AdvertsModule } from './adverts/adverts.module';
 // import { PaymentModule } from './payments/payment.module';
 import { CartModule } from './cart/cart.module';
-import { GuestSessionModule } from './guest-session/guest-session.module';
 // import { ReviewModule } from './reviews/review.module';
 // import { NotificationModule } from './notifications/notification.module';
 
@@ -39,7 +39,6 @@ const ServerModules = [
 const FeatureModules = [
   FirebaseModule,
   CartModule,
-  GuestSessionModule,
   UsersModule,
   AuthModule,
   SharedModule,
@@ -48,6 +47,7 @@ const FeatureModules = [
   CategoriesModule,
   ProductsModule,
   OrdersModule,
+  AdvertsModule,
 ];
 
 @Module({

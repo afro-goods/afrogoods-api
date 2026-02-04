@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Patch,
+  Delete,
   Param,
   Body,
   UseGuards,
@@ -215,6 +216,17 @@ export class OrdersController {
   @Roles(UserRole.ADMIN)
   getOrderNotes(@Param('id') orderId: string) {
     return this.ordersService.getAllOrderNotes(orderId);
+  }
+
+  /** DELETE /orders/admin/order/:id/notes/:noteIndex - Delete a note from an order */
+  @Delete('admin/order/:id/notes/:noteIndex')
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  deleteOrderNote(
+    @Param('id') orderId: string,
+    @Param('noteIndex') noteIndex: string,
+  ) {
+    return this.ordersService.deleteOrderNote(orderId, parseInt(noteIndex, 10));
   }
 
   /** GET /orders/admin/order/:id/history - Get status history for an order */

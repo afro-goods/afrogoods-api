@@ -386,33 +386,36 @@ export class OrdersService {
   // GUEST OPERATIONS
   // ============================================================
 
-  /** Create guest order (with transaction) */
+  /** Create guest order - items sent directly from frontend */
   async createGuestOrder(dto: GuestCheckoutDto): Promise<GuestOrderDocument> {
     return inTransaction(this.connection, async (session) => {
-      const cart = await this.cartModel
-        .findOne({ guestSessionId: dto.sessionId })
-        .session(session);
-      if (!cart || cart.items.length === 0) {
+      if (!dto.items || dto.items.length === 0) {
         throw new BadRequestException('Cart is empty');
       }
 
-      const validItems = await this.validateAndGetCartItems(cart, session);
+      // Validate items and get product details
+      const validItems = await this.validateGuestItems(dto.items, session);
       await this.reduceStock(validItems, session);
+
+      // Calculate total amount
+      const totalAmount = validItems.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0,
+      );
 
       const [guestOrder] = await this.guestOrderModel.create(
         [
           {
             orderId: generateOrderId(),
-            sessionId: dto.sessionId,
             customerInfo: dto.customerInfo,
             shippingAddress: dto.shippingAddress,
             billingAddress: dto.billingAddress,
             items: validItems.map((item) => ({
               productId: new Types.ObjectId(item.productId),
               quantity: item.quantity,
-              priceAtPurchase: item.priceAtAddedTime,
+              priceAtPurchase: item.price,
             })),
-            totalAmount: cart.totalAmount,
+            totalAmount,
             status: OrderStatus.PENDING,
             isPaid: false,
             notes: [],
@@ -429,14 +432,81 @@ export class OrdersService {
         { session },
       );
 
-      cart.items = [];
-      cart.totalAmount = 0;
-      await cart.save({ session });
-
       await guestOrder.populate('items.productId', 'name price images');
 
       return guestOrder;
     });
+  }
+
+  /** Validate guest checkout items and return with prices */
+  private async validateGuestItems(
+    items: Array<{ productId: string; quantity: number }>,
+    session?: ClientSession,
+  ) {
+    const productIds = items
+      .map((item) =>
+        Types.ObjectId.isValid(item.productId)
+          ? new Types.ObjectId(item.productId)
+          : null,
+      )
+      .filter(Boolean) as Types.ObjectId[];
+
+    if (!productIds.length) {
+      throw new BadRequestException('No valid products in cart');
+    }
+
+    const products = await this.productModel
+      .find({ _id: { $in: productIds }, availabilityStatus: 'In Stock' })
+      .select('_id stock price')
+      .session(session || null)
+      .lean();
+
+    if (!products.length) {
+      throw new BadRequestException('All products are unavailable');
+    }
+
+    const productMap = new Map(
+      products.map((p) => [
+        p._id.toString(),
+        { stock: p.stock, price: p.price },
+      ]),
+    );
+
+    const validItems: Array<{
+      productId: string;
+      quantity: number;
+      price: number;
+    }> = [];
+    const errors: string[] = [];
+
+    for (const item of items) {
+      const product = productMap.get(item.productId);
+      if (!product) {
+        errors.push(`Product ${item.productId} not found or unavailable`);
+        continue;
+      }
+      if (product.stock < item.quantity) {
+        errors.push(
+          `${item.productId}: need ${item.quantity}, have ${product.stock}`,
+        );
+        continue;
+      }
+      validItems.push({
+        productId: item.productId,
+        quantity: item.quantity,
+        price: product.price,
+      });
+    }
+
+    if (errors.length > 0) {
+      throw new BadRequestException(`Stock issues: ${errors.join('; ')}`);
+    }
+
+    if (!validItems.length) {
+      throw new BadRequestException('No valid items to order');
+    }
+
+    return validItems;
   }
 
   /** Track guest order by orderId and email */
@@ -618,6 +688,7 @@ export class OrdersService {
   ): Promise<AdminOrderListResponseDto> {
     const {
       orderId,
+      userId,
       email,
       phone,
       customerName,
@@ -642,11 +713,24 @@ export class OrdersService {
 
     let regularOrders: any[] = [];
     if (!guestOrdersOnly) {
+      // Build the filter for regular orders
+      const regularOrderFilter: any = {
+        ...baseFilter,
+        ...(orderId && { orderId: { $regex: orderId, $options: 'i' } }),
+      };
+
+      // Add userId filter - convert string to ObjectId for MongoDB query
+      if (userId) {
+        try {
+          regularOrderFilter.userId = new Types.ObjectId(userId);
+        } catch {
+          // If invalid ObjectId format, use as-is (will return no results)
+          regularOrderFilter.userId = userId;
+        }
+      }
+
       regularOrders = await this.orderModel
-        .find({
-          ...baseFilter,
-          ...(orderId && { orderId: { $regex: orderId, $options: 'i' } }),
-        })
+        .find(regularOrderFilter)
         .populate('userId', 'firstName lastName email phone')
         .populate('items.productId', 'name price images')
         .sort({ createdAt: -1 })
@@ -718,7 +802,7 @@ export class OrdersService {
           },
       itemsCount: order.items?.length || 0,
       items: (order.items || []).map((item: any) => ({
-        productId: item.productId.toString(),
+        productId: item.productId?.toString() || null,
         quantity: item.quantity,
         priceAtPurchase: item.priceAtPurchase,
       })),
@@ -954,6 +1038,33 @@ export class OrdersService {
 
     const guestOrder = await this.guestOrderModel.findOne({ orderId });
     if (guestOrder) return guestOrder.notes;
+
+    throw new NotFoundException('Order not found');
+  }
+
+  /** Delete a note from an order (admin only) */
+  async deleteOrderNote(orderId: string, noteIndex: number) {
+    // Try regular order first
+    const order = await this.orderModel.findOne({ orderId });
+    if (order) {
+      if (noteIndex < 0 || noteIndex >= order.notes.length) {
+        throw new BadRequestException('Invalid note index');
+      }
+      order.notes.splice(noteIndex, 1);
+      await order.save();
+      return order.notes;
+    }
+
+    // Try guest order
+    const guestOrder = await this.guestOrderModel.findOne({ orderId });
+    if (guestOrder) {
+      if (noteIndex < 0 || noteIndex >= guestOrder.notes.length) {
+        throw new BadRequestException('Invalid note index');
+      }
+      guestOrder.notes.splice(noteIndex, 1);
+      await guestOrder.save();
+      return guestOrder.notes;
+    }
 
     throw new NotFoundException('Order not found');
   }

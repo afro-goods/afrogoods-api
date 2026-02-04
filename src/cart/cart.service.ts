@@ -29,90 +29,33 @@ export class CartService {
     return typeof id === 'string' ? new Types.ObjectId(id) : id;
   }
 
-  private validateCartIdentifier(
-    userId?: string | Types.ObjectId,
-    guestSessionId?: string,
-  ): void {
-    if (!userId && !guestSessionId) {
-      throw new BadRequestException(
-        'Either userId or guestSessionId must be provided',
-      );
-    }
-    if (userId && guestSessionId) {
-      throw new BadRequestException(
-        'Cannot provide both userId and guestSessionId',
-      );
-    }
-  }
-
-  private buildCartQuery(
-    userId?: string | Types.ObjectId,
-    guestSessionId?: string,
-  ) {
-    if (userId) {
-      return { userId: this.toObjectId(userId) };
-    }
-    if (guestSessionId) {
-      return { guestSessionId };
-    }
-    throw new BadRequestException(
-      'Either userId or guestSessionId must be provided',
-    );
-  }
-
   /* ---------------- GET OR CREATE ---------------- */
 
   async getOrCreateCart(
-    userId?: string | Types.ObjectId,
-    guestSessionId?: string,
+    userId: string | Types.ObjectId,
   ): Promise<CartDocument> {
-    this.validateCartIdentifier(userId, guestSessionId);
-
-    const query = this.buildCartQuery(userId, guestSessionId);
-    const updateData: any = { $setOnInsert: { items: [], totalAmount: 0 } };
-
-    if (guestSessionId) {
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 30);
-      updateData.$setOnInsert.expiresAt = expiresAt;
-      updateData.$setOnInsert.guestSessionId = guestSessionId;
-    } else if (userId) {
-      updateData.$setOnInsert.userId = this.toObjectId(userId);
-    }
+    const userObjectId = this.toObjectId(userId);
 
     const cart = await this.cartModel
-      .findOneAndUpdate(query, updateData, {
-        upsert: true,
-        new: true,
-        setDefaultsOnInsert: true,
-      })
+      .findOneAndUpdate(
+        { userId: userObjectId },
+        { $setOnInsert: { items: [], totalAmount: 0, userId: userObjectId } },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      )
       .exec();
 
     return cart;
   }
 
-  async getOrCreateCartForUser(
-    userId: string | Types.ObjectId,
-  ): Promise<CartDocument> {
-    return this.getOrCreateCart(userId);
-  }
-
-  async getOrCreateCartForGuest(guestSessionId: string): Promise<CartDocument> {
-    return this.getOrCreateCart(undefined, guestSessionId);
-  }
-
   /* ---------------- ADD TO CART ---------------- */
 
-  async addToCart(
-    dto: AddToCartDto,
-    userId?: string | Types.ObjectId,
-    guestSessionId?: string,
-  ) {
-    const cart = await this.getOrCreateCart(userId, guestSessionId);
+  async addToCart(dto: AddToCartDto, userId: string | Types.ObjectId) {
+    const cart = await this.getOrCreateCart(userId);
     const product = await this.productModel
       .findById(dto.productId)
       .populate('attributes')
       .lean();
+
     if (
       !product ||
       product.availabilityStatus !== AvailabilityStatus.IN_STOCK
@@ -127,9 +70,7 @@ export class CartService {
         const selected = dto.selectedAttributes[attr.name];
         if (selected) {
           if (attr.type === 'single') {
-            // Find the selected option and validate it exists
             const selectedOption = attr.options?.find((opt: any) => {
-              // Handle both old (string) and new (object) formats
               const optionName = typeof opt === 'string' ? opt : opt.name;
               return optionName === selected;
             });
@@ -140,15 +81,12 @@ export class CartService {
               );
             }
 
-            // Add option price if it's in the new format
             if (typeof selectedOption === 'object' && selectedOption.price) {
               finalPrice += selectedOption.price;
             }
           } else if (attr.type === 'multiple' && Array.isArray(selected)) {
-            // Validate that all selected options exist and calculate total price
             for (const sel of selected) {
               const selectedOption = attr.options?.find((opt: any) => {
-                // Handle both old (string) and new (object) formats
                 const optionName = typeof opt === 'string' ? opt : opt.name;
                 return optionName === sel;
               });
@@ -159,7 +97,6 @@ export class CartService {
                 );
               }
 
-              // Add option price if it's in the new format
               if (typeof selectedOption === 'object' && selectedOption.price) {
                 finalPrice += selectedOption.price;
               }
@@ -198,26 +135,16 @@ export class CartService {
     cart.totalAmount = calculateCartTotal(cart.items);
     await cart.save();
 
-    return this.getCart(userId, guestSessionId);
-  }
-
-  async addToCartForUser(userId: string | Types.ObjectId, dto: AddToCartDto) {
-    return this.addToCart(dto, userId);
-  }
-
-  async addToCartForGuest(guestSessionId: string, dto: AddToCartDto) {
-    return this.addToCart(dto, undefined, guestSessionId);
+    return this.getCart(userId);
   }
 
   /* ---------------- GET CART (POPULATED) ---------------- */
 
-  async getCart(userId?: string | Types.ObjectId, guestSessionId?: string) {
-    this.validateCartIdentifier(userId, guestSessionId);
-
-    const query = this.buildCartQuery(userId, guestSessionId);
+  async getCart(userId: string | Types.ObjectId) {
+    const userObjectId = this.toObjectId(userId);
 
     const cart = await this.cartModel
-      .findOne(query)
+      .findOne({ userId: userObjectId })
       .populate({
         path: 'items.productId',
         select: 'name price description images stock isActive',
@@ -246,22 +173,10 @@ export class CartService {
     };
   }
 
-  async getCartForUser(userId: string | Types.ObjectId) {
-    return this.getCart(userId);
-  }
-
-  async getCartForGuest(guestSessionId: string) {
-    return this.getCart(undefined, guestSessionId);
-  }
-
   /* ---------------- REMOVE ITEM ---------------- */
 
-  async removeItem(
-    productId: string,
-    userId?: string | Types.ObjectId,
-    guestSessionId?: string,
-  ) {
-    const cart = await this.getOrCreateCart(userId, guestSessionId);
+  async removeItem(productId: string, userId: string | Types.ObjectId) {
+    const cart = await this.getOrCreateCart(userId);
 
     cart.items = cart.items.filter(
       (item) => item.productId.toString() !== productId,
@@ -270,16 +185,15 @@ export class CartService {
     cart.totalAmount = calculateCartTotal(cart.items);
     await cart.save();
 
-    return this.getCart(userId, guestSessionId);
+    return this.getCart(userId);
   }
 
   async changeQuantity(
     productId: string,
     delta: number,
-    userId?: string | Types.ObjectId,
-    guestSessionId?: string,
+    userId: string | Types.ObjectId,
   ) {
-    const cart = await this.getOrCreateCart(userId, guestSessionId);
+    const cart = await this.getOrCreateCart(userId);
 
     const item = cart.items.find((i) => i.productId.toString() === productId);
 
@@ -298,11 +212,11 @@ export class CartService {
     cart.totalAmount = calculateCartTotal(cart.items);
     await cart.save();
 
-    return this.getCart(userId, guestSessionId);
+    return this.getCart(userId);
   }
 
-  async clearCart(userId?: string | Types.ObjectId, guestSessionId?: string) {
-    const cart = await this.getOrCreateCart(userId, guestSessionId);
+  async clearCart(userId: string | Types.ObjectId) {
+    const cart = await this.getOrCreateCart(userId);
 
     cart.items = [];
     cart.totalAmount = 0;
@@ -310,44 +224,11 @@ export class CartService {
     return cart.save();
   }
 
-  async removeItemForUser(userId: string | Types.ObjectId, productId: string) {
-    return this.removeItem(productId, userId);
-  }
-
-  async removeItemForGuest(guestSessionId: string, productId: string) {
-    return this.removeItem(productId, undefined, guestSessionId);
-  }
-
-  async changeQuantityForUser(
-    userId: string | Types.ObjectId,
-    productId: string,
-    delta: number,
-  ) {
-    return this.changeQuantity(productId, delta, userId);
-  }
-
-  async changeQuantityForGuest(
-    guestSessionId: string,
-    productId: string,
-    delta: number,
-  ) {
-    return this.changeQuantity(productId, delta, undefined, guestSessionId);
-  }
-
-  async clearCartForUser(userId: string | Types.ObjectId) {
-    return this.clearCart(userId);
-  }
-
-  async clearCartForGuest(guestSessionId: string) {
-    return this.clearCart(undefined, guestSessionId);
-  }
-
   async replaceCart(
     localItems: CartItemInput[],
-    userId?: string | Types.ObjectId,
-    guestSessionId?: string,
+    userId: string | Types.ObjectId,
   ) {
-    this.validateCartIdentifier(userId, guestSessionId);
+    const userObjectId = this.toObjectId(userId);
 
     const productIds = localItems.map((i) => i.productId);
     const products = await this.productModel
@@ -358,8 +239,9 @@ export class CartService {
 
     const validProductMap = new Map(products.map((p) => [p._id.toString(), p]));
 
-    const query = this.buildCartQuery(userId, guestSessionId);
-    const existingCart = await this.cartModel.findOne(query).lean();
+    const existingCart = await this.cartModel
+      .findOne({ userId: userObjectId })
+      .lean();
 
     const mergedItemsMap = new Map<string, any>();
 
@@ -427,52 +309,12 @@ export class CartService {
       0,
     );
 
-    const updateData: any = {
-      $set: {
-        items: mergedItems,
-        totalAmount,
-      },
-    };
+    await this.cartModel.findOneAndUpdate(
+      { userId: userObjectId },
+      { $set: { items: mergedItems, totalAmount } },
+      { upsert: true },
+    );
 
-    if (guestSessionId) {
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 30);
-      updateData.$set.expiresAt = expiresAt;
-    }
-
-    await this.cartModel.findOneAndUpdate(query, updateData, { upsert: true });
-
-    return this.getCart(userId, guestSessionId);
-  }
-
-  async replaceCartForUser(
-    userId: string | Types.ObjectId,
-    localItems: CartItemInput[],
-  ) {
-    return this.replaceCart(localItems, userId);
-  }
-
-  async replaceCartForGuest(
-    guestSessionId: string,
-    localItems: CartItemInput[],
-  ) {
-    return this.replaceCart(localItems, undefined, guestSessionId);
-  }
-
-  /* ---------------- CART EXPIRATION HANDLING ---------------- */
-
-  async cleanupExpiredGuestCarts(): Promise<void> {
-    const now = new Date();
-    await this.cartModel.deleteMany({
-      guestSessionId: { $exists: true },
-      expiresAt: { $lt: now },
-    });
-  }
-
-  async extendGuestCartExpiration(guestSessionId: string): Promise<void> {
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
-
-    await this.cartModel.updateOne({ guestSessionId }, { $set: { expiresAt } });
+    return this.getCart(userId);
   }
 }

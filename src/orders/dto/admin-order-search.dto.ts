@@ -17,6 +17,10 @@ export class AdminOrderSearchDto {
   orderId?: string;
 
   @IsOptional()
+  @IsString()
+  userId?: string;
+
+  @IsOptional()
   @IsEmail()
   email?: string;
 

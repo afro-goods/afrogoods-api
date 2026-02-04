@@ -5,8 +5,11 @@ import {
   IsNotEmpty,
   IsOptional,
   IsBoolean,
+  IsNumber,
+  IsArray,
   ValidateNested,
   MinLength,
+  Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -48,10 +51,24 @@ export class AddressDto {
   country: string;
 }
 
-export class GuestCheckoutDto {
+export class CartItemDto {
   @IsString()
   @IsNotEmpty()
-  sessionId: string;
+  productId: string;
+
+  @IsNumber()
+  @Min(1)
+  quantity: number;
+
+  @IsOptional()
+  selectedAttributes?: Record<string, string>;
+}
+
+export class GuestCheckoutDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CartItemDto)
+  items: CartItemDto[];
 
   @ValidateNested()
   @Type(() => CustomerInfoDto)

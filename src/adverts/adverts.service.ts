@@ -10,7 +10,7 @@ import { Model, Types } from 'mongoose';
 import { Advert, AdvertDocument } from './schemas/advert.schema';
 import { CreateAdvertDto } from './dto/create-advert.dto';
 import { UpdateAdvertDto } from './dto/update-advert.dto';
-import { ReviewAdvertDto } from './dto/approve-advert.dto';
+import { ReviewAdvertDto } from './dto/review-advert.dto';
 import { AdvertQueryDto } from './dto/advert-query.dto';
 import { PaginationService } from 'src/shared/services/pagination/services/pagination.service';
 import { CategoriesService } from '../categories/categories.service';

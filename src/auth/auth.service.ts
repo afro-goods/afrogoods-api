@@ -19,7 +19,7 @@ export class AuthService {
     @Inject('FIREBASE_ADMIN') private firebaseAdmin: typeof admin,
     private usersService: UsersService,
     private emailQueueService: EmailQueueService,
-  ) {}
+  ) { }
 
   async register(registerDto: RegisterDto, firebaseUid: string) {
     try {
@@ -58,6 +58,12 @@ export class AuthService {
         phoneNumber: registerDto.phoneNumber,
         role: UserRole.USER,
         address: registerDto.address,
+      });
+
+      // Send welcome email asynchronously
+      await this.emailQueueService.sendWelcomeEmail({
+        email: user.email,
+        name: user.firstName || user.username || 'User',
       });
 
       return {

@@ -93,8 +93,22 @@ export class EmailQueueService {
     const emailJob: EmailJobDto = {
       to: dto.email,
       subject: `Order Confirmation - ${dto.orderId}`,
-      template: 'order-confirmation',
-      data: { orderId: dto.orderId, ...dto.orderDetails },
+      template: 'orderconfirmation',
+      data: {
+        customerName: dto.orderDetails.customerName,
+        orderId: dto.orderId,
+        orderDate: new Date(),
+        total: dto.orderDetails.totalAmount,
+        currency: 'USD',
+        itemCount: dto.orderDetails.itemCount,
+        items: dto.orderDetails.items || [],
+        subtotal: dto.orderDetails.totalAmount,
+        shippingCost: dto.orderDetails.shippingCost || 0,
+        shippingAddress: dto.orderDetails.shippingAddress || {},
+        paymentMethod: dto.orderDetails.paymentMethod || 'Credit Card',
+        appUrl: process.env.APP_URL || 'https://afrogoods.com',
+        ...dto.orderDetails
+      },
     };
 
     return this.sendEmail(emailJob, 2);
@@ -107,8 +121,16 @@ export class EmailQueueService {
     const emailJob: EmailJobDto = {
       to: dto.email,
       subject: `Order ${dto.orderId} Status Update`,
-      template: 'order-status-update',
-      data: { orderId: dto.orderId, ...dto.statusData },
+      template: 'orderstatusupdate',
+      data: {
+        orderId: dto.orderId,
+        customerName: dto.statusData.customerName,
+        previousStatus: dto.statusData.previousStatus,
+        newStatus: dto.statusData.newStatus,
+        updateDate: new Date(),
+        appUrl: process.env.APP_URL || 'https://afrogoods.com',
+        ...dto.statusData
+      },
     };
 
     return this.sendEmail(emailJob, 3); // Medium-high priority
@@ -137,11 +159,23 @@ export class EmailQueueService {
     const emailJob: EmailJobDto = {
       to: dto.email,
       subject: `Order Cancellation Confirmation - ${dto.orderId}`,
-      template: 'order-cancellation-confirmation',
+      template: 'ordercancellation',
       data: {
+        customerName: dto.cancellationData.customerName,
         orderId: dto.orderId,
-        ...dto.cancellationData,
+        orderDate: new Date(),
+        cancellationDate: new Date(),
+        orderTotal: dto.cancellationData.orderTotal,
+        currency: 'USD',
+        cancellationReason: dto.cancellationData.cancellationReason,
+        items: dto.cancellationData.items || [],
         hasRefund: dto.cancellationData.refundAmount > 0,
+        refundAmount: dto.cancellationData.refundAmount,
+        refundMethod: dto.cancellationData.refundMethod || 'Original Payment Method',
+        refundTimeline: dto.cancellationData.refundTimeline,
+        appUrl: process.env.APP_URL || 'https://afrogoods.com',
+        supportEmail: 'support@afrogoods.com',
+        ...dto.cancellationData,
       },
     };
 

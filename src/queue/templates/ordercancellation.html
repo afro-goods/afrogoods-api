@@ -1,0 +1,145 @@
+<h2>Order Cancellation Confirmation</h2>
+
+<p>{{#if customerName}}Hello {{customerName}},{{else}}Hello,{{/if}}</p>
+
+<p>This email confirms that your order has been cancelled as requested.</p>
+
+<div style="background-color: #f8d7da; padding: 20px; border-left: 4px solid #dc3545; border-radius: 3px; margin: 20px 0;">
+  <h3 style="margin-top: 0; color: #721c24;">Cancelled Order Details</h3>
+  <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td style="padding: 5px 0;"><strong>Order Number:</strong></td>
+      <td style="padding: 5px 0; text-align: right;">{{orderId}}</td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 0;"><strong>Order Date:</strong></td>
+      <td style="padding: 5px 0; text-align: right;">{{formatDate orderDate}}</td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 0;"><strong>Cancelled Date:</strong></td>
+      <td style="padding: 5px 0; text-align: right;">{{formatDate cancellationDate}}</td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 0;"><strong>Order Total:</strong></td>
+      <td style="padding: 5px 0; text-align: right;">{{currency orderTotal currency}}</td>
+    </tr>
+  </table>
+</div>
+
+{{#if cancellationReason}}
+<div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0;">
+  <h4 style="margin-top: 0;">Cancellation Reason:</h4>
+  <p style="margin: 0;">{{cancellationReason}}</p>
+</div>
+{{/if}}
+
+<h3>Cancelled Items</h3>
+<table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+  <thead>
+    <tr style="background-color: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+      <th style="padding: 10px; text-align: left;">Product</th>
+      <th style="padding: 10px; text-align: center;">Qty</th>
+      <th style="padding: 10px; text-align: right;">Price</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each items}}
+    <tr style="border-bottom: 1px solid #dee2e6;">
+      <td style="padding: 10px;">
+        <strong>{{this.name}}</strong>
+        {{#if this.variant}}<br><span style="color: #6c757d; font-size: 14px;">{{this.variant}}</span>{{/if}}
+      </td>
+      <td style="padding: 10px; text-align: center;">{{this.quantity}}</td>
+      <td style="padding: 10px; text-align: right;">{{currency this.price ../currency}}</td>
+    </tr>
+    {{/each}}
+  </tbody>
+</table>
+
+{{#if hasRefund}}
+<div style="background-color: #d1ecf1; padding: 20px; border-left: 4px solid #17a2b8; border-radius: 3px; margin: 20px 0;">
+  <h3 style="margin-top: 0; color: #0c5460;">💳 Refund Information</h3>
+  
+  <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
+    <tr>
+      <td style="padding: 5px 0;"><strong>Refund Amount:</strong></td>
+      <td style="padding: 5px 0; text-align: right;"><strong>{{currency refundAmount currency}}</strong></td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 0;"><strong>Refund Method:</strong></td>
+      <td style="padding: 5px 0; text-align: right;">{{refundMethod}}</td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 0;"><strong>Processing Time:</strong></td>
+      <td style="padding: 5px 0; text-align: right;">{{refundTimeline}}</td>
+    </tr>
+  </table>
+  
+  <p style="margin: 15px 0 0 0; color: #0c5460; font-size: 14px;">
+    Your refund will be processed to your original payment method. Depending on your bank or card issuer, it may take an additional 2-5 business days for the funds to appear in your account.
+  </p>
+</div>
+{{else}}
+<div style="background-color: #d1ecf1; padding: 15px; border-radius: 5px; margin: 20px 0;">
+  <p style="margin: 0; color: #0c5460;">
+    <strong>ℹ️ No Payment Processed:</strong><br>
+    Since your order was cancelled before payment was processed, no charges were made to your account.
+  </p>
+</div>
+{{/if}}
+
+{{#if partialCancellation}}
+<div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0;">
+  <p style="margin: 0; color: #856404;">
+    <strong>⚠️ Partial Cancellation:</strong><br>
+    This is a partial cancellation. Some items from your original order are still being processed.
+    {{#if remainingOrderId}}
+    <br><a href="{{appUrl}}/orders/{{remainingOrderId}}" style="color: #856404; text-decoration: underline;">View remaining order →</a>
+    {{/if}}
+  </p>
+</div>
+{{/if}}
+
+<hr class="divider">
+
+<h3>What Happens Next?</h3>
+
+{{#if hasRefund}}
+<ol>
+  <li><strong>Refund Initiated:</strong> We've started processing your refund</li>
+  <li><strong>Bank Processing:</strong> Your bank/card issuer will process the refund ({{refundTimeline}})</li>
+  <li><strong>Funds Available:</strong> The refund amount will appear in your account</li>
+</ol>
+{{else}}
+<p>Since no payment was processed, no further action is required. The order has been completely removed from our system.</p>
+{{/if}}
+
+{{#if restockInfo}}
+<div style="background-color: #e7f3ff; padding: 15px; border-radius: 5px; margin: 20px 0;">
+  <h4 style="margin-top: 0;">Item Availability:</h4>
+  <p style="margin: 0;">{{restockInfo}}</p>
+</div>
+{{/if}}
+
+<div class="text-center">
+  <a href="{{appUrl}}/shop" class="button">Continue Shopping</a>
+  {{#if hasRefund}}
+  <a href="{{appUrl}}/account/refunds" class="button button-secondary">Track Refund Status</a>
+  {{/if}}
+</div>
+
+<hr class="divider">
+
+<h3>Need Help?</h3>
+<p>If you have any questions about this cancellation or need assistance, please don't hesitate to contact us:</p>
+
+<ul>
+  <li>Email: <a href="mailto:{{supportEmail}}" style="color: #3498db;">{{supportEmail}}</a></li>
+  <li>Help Center: <a href="{{appUrl}}/help" style="color: #3498db;">{{appUrl}}/help</a></li>
+  <li>Live Chat: Available on our website</li>
+</ul>
+
+<p>We're sorry to see this order cancelled, but we hope to serve you again soon!</p>
+
+<p>Best regards,<br>
+<strong>The {{appName}} Team</strong></p>

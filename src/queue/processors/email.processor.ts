@@ -2,7 +2,7 @@ import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger, Inject, Injectable } from '@nestjs/common';
 import { EmailJobDto } from '../dto/email-job.dto';
-import { EmailTemplateService } from '../services/templates';
+import { EmailTemplateService } from '../services/email-template.service';
 import { ResendProvider } from '../services/resend.provider';
 
 @Injectable()

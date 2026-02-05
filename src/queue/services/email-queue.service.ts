@@ -19,7 +19,7 @@ import {
 export class EmailQueueService {
   private readonly logger = new Logger(EmailQueueService.name);
 
-  constructor(@InjectQueue('email') private emailQueue: Queue) {}
+  constructor(@InjectQueue('email') private emailQueue: Queue) { }
 
   /**
    * Generic method to add email jobs to queue
@@ -41,8 +41,12 @@ export class EmailQueueService {
     const emailJob: EmailJobDto = {
       to: dto.email,
       subject: 'Welcome to AfroGoods!',
-      template: 'welcome',
-      data: { name: dto.name },
+      template: 'welcomeemail',
+      data: {
+        name: dto.name,
+        appName: 'AfroGoods',
+        appUrl: process.env.APP_URL || 'https://afrogoods.com',
+      },
     };
 
     return this.sendEmail(emailJob);
@@ -55,8 +59,14 @@ export class EmailQueueService {
     const emailJob: EmailJobDto = {
       to: dto.email,
       subject: 'Reset Your Password',
-      template: 'password-reset',
-      data: { token: dto.token, name: dto.name },
+      template: 'passwordreset',
+      data: {
+        token: dto.token,
+        name: dto.name,
+        resetUrl: dto.token,
+        expiryMinutes: 60,
+        appName: 'AfroGoods',
+      },
     };
 
     return this.sendEmail(emailJob, 1); // High priority
@@ -87,7 +97,7 @@ export class EmailQueueService {
       data: { orderId: dto.orderId, ...dto.orderDetails },
     };
 
-    return this.sendEmail(emailJob, 2); // High priority for order confirmations
+    return this.sendEmail(emailJob, 2);
   }
 
   /**

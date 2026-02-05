@@ -9,8 +9,7 @@ import { PaymentProcessor } from './processors/payment.processor';
 
 import { EmailQueueService } from './services/email-queue.service';
 import { PaymentQueueService } from './services/payment-queue.service';
-
-import { EmailTemplateService } from './services/templates';
+import { EmailTemplateService } from './services/email-template.service';
 import { ResendProvider } from './services/resend.provider';
 
 @Global()
@@ -43,7 +42,7 @@ import { ResendProvider } from './services/resend.provider';
     PaymentQueueService,
     RedisProvider,
 
-    // 🔥 Add these
+    //  Add these
     EmailTemplateService,
     ResendProvider,
   ],

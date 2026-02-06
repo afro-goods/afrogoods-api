@@ -53,6 +53,22 @@ export class Order {
 
   @Prop()
   cancellationReason?: string;
+
+  @Prop({ type: String })
+  idempotencyKey?: string;
+
+  @Prop({ type: Date })
+  idempotencyKeyCreatedAt?: Date;
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);
+
+// Sparse unique index for idempotency key - only indexes documents where the field exists
+OrderSchema.index(
+  { idempotencyKey: 1 },
+  {
+    unique: true,
+    sparse: true,
+    partialFilterExpression: { idempotencyKey: { $exists: true, $ne: null } },
+  },
+);

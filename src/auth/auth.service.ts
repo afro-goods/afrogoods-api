@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 import { UsersService } from '../users/users.service';
@@ -15,6 +16,8 @@ import { LoginDto } from './dto/login.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @Inject('FIREBASE_ADMIN') private firebaseAdmin: typeof admin,
     private usersService: UsersService,
@@ -76,6 +79,20 @@ export class AuthService {
       }
       throw new BadRequestException('Registration failed');
     }
+  }
+
+  async registerWithCartTransfer(
+    registerDto: RegisterWithCartDto,
+    firebaseUid: string,
+  ) {
+    const registrationResult = await this.register(registerDto, firebaseUid);
+
+    // Cart transfer is now handled by frontend sending cart items directly
+    // No server-side guest session cart to merge
+    return {
+      ...registrationResult,
+      cartMerged: false,
+    };
   }
 
   async login(loginDto: LoginDto) {

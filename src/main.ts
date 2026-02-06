@@ -6,12 +6,15 @@ import { ValidationPipe } from '@nestjs/common';
 
 const origins: Record<string, string[]> = {
   production: [''],
-  development: ['http://localhost:3000', 'http://localhost:5173'],
+  development: ['http://192.168.0.198:5173', 'http://localhost:5173'],
   test: ['http://localhost:3000'],
 };
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Set global API prefix
+  app.setGlobalPrefix('api');
 
   // Body size limits
   app.use(json({ limit: '50mb' }));

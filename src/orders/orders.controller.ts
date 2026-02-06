@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Patch,
+  Delete,
   Param,
   Body,
   UseGuards,
@@ -99,7 +100,7 @@ export class OrdersController {
   }
 
   // ============================================================
-  // GUEST ENDPOINTS (3)
+  // GUEST ENDPOINTS (5)
   // ============================================================
 
   /** POST /orders/guest - Create guest order */
@@ -130,16 +131,42 @@ export class OrdersController {
     );
   }
 
+  /** PATCH /orders/guest/:id/shipping-address - Update guest shipping address */
+  @Patch('guest/:id/shipping-address')
+  updateGuestShippingAddress(
+    @Param('id') orderId: string,
+    @Body() body: { email: string } & UpdateShippingAddressDto,
+  ) {
+    return this.ordersService.updateGuestShippingAddress(
+      orderId,
+      body.email,
+      body,
+    );
+  }
+
+  /** POST /orders/guest/:id/notes - Add note to guest order */
+  @Post('guest/:id/notes')
+  addGuestNote(
+    @Param('id') orderId: string,
+    @Body() noteDto: { email: string; content: string },
+  ) {
+    return this.ordersService.addGuestNote(
+      orderId,
+      noteDto.email,
+      noteDto.content,
+    );
+  }
+
   // ============================================================
   // ADMIN ENDPOINTS (5) - Requires Admin Role
   // ============================================================
 
-  /** GET /orders/admin/all - List all orders (paginated) */
+  /** GET /orders/admin/all - List all orders including guest orders (paginated) */
   @Get('admin/all')
   @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   getAllOrders(@Query('page') page?: string, @Query('limit') limit?: string) {
-    return this.ordersService.getAllOrders(
+    return this.ordersService.getAllOrdersIncludingGuest(
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
     );

@@ -1,4 +1,7 @@
-import { PartialType } from '@nestjs/mapped-types';
+import { PartialType, OmitType } from '@nestjs/mapped-types';
 import { CreateCategoryDto } from './create-category.dto';
 
-export class UpdateCategoryDto extends PartialType(CreateCategoryDto) {}
+// Exclude 'type' field from updates - category type is immutable after creation
+export class UpdateCategoryDto extends PartialType(
+  OmitType(CreateCategoryDto, ['type'] as const),
+) {}

@@ -18,6 +18,7 @@ import { ProductsModule } from 'src/product/product.module';
 import { AttributesModule } from './attributes/attributes.module';
 import { CategoriesModule } from './categories/categories.module';
 import { OrdersModule } from './orders/orders.module';
+import { AdvertsModule } from './adverts/adverts.module';
 // import { PaymentModule } from './payments/payment.module';
 import { CartModule } from './cart/cart.module';
 import { TestEmailModule } from './test-email/test-email.module';

@@ -48,9 +48,6 @@ export class GuestOrder {
   @Prop({ required: true, unique: true, index: true })
   orderId: string;
 
-  @Prop({ required: true, index: true })
-  sessionId: string;
-
   @Prop({ type: CustomerInfoSchema, required: true })
   customerInfo: CustomerInfo;
 
@@ -92,9 +89,25 @@ export class GuestOrder {
 
   @Prop()
   cancellationReason?: string;
+
+  @Prop({ type: String })
+  idempotencyKey?: string;
+
+  @Prop({ type: Date })
+  idempotencyKeyCreatedAt?: Date;
 }
 
 export const GuestOrderSchema = SchemaFactory.createForClass(GuestOrder);
+
+// Sparse unique index for idempotency key - only indexes documents where the field exists
+GuestOrderSchema.index(
+  { idempotencyKey: 1 },
+  {
+    unique: true,
+    sparse: true,
+    partialFilterExpression: { idempotencyKey: { $exists: true, $ne: null } },
+  },
+);
 
 // Add indexes for efficient lookups
 GuestOrderSchema.index({ orderId: 1, 'customerInfo.email': 1 });

@@ -8,20 +8,9 @@ import { FirebaseRegisterGuard } from './guards/firebase-register.guard';
 import { FirebaseModule } from '../firebase/firebase.module';
 
 @Module({
-  imports: [
-    UsersModule,
-    FirebaseModule,
-  ],
+  imports: [UsersModule, FirebaseModule],
   controllers: [AuthController],
-  providers: [
-    AuthService,
-    FirebaseAuthGuard,
-    FirebaseRegisterGuard,
-  ],
-  exports: [
-    AuthService,
-    FirebaseAuthGuard,        // ✅ REQUIRED for OrdersModule
-    FirebaseRegisterGuard,
-  ],
+  providers: [AuthService, FirebaseAuthGuard, FirebaseRegisterGuard],
+  exports: [AuthService, FirebaseAuthGuard, FirebaseRegisterGuard],
 })
 export class AuthModule {}

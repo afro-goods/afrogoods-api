@@ -73,6 +73,18 @@ export class OrdersService {
     [OrderStatus.REFUNDED]: [],
   };
 
+  private readonly DEFAULT_STATUS_REASONS: Record<OrderStatus, string> = {
+    [OrderStatus.PENDING]: 'Order placed',
+    [OrderStatus.CONFIRMED]: 'Order confirmed by admin',
+    [OrderStatus.PAID]: 'Payment received',
+    [OrderStatus.PROCESSING]: 'Order is being processed',
+    [OrderStatus.SHIPPED]: 'Order has been shipped',
+    [OrderStatus.OUT_FOR_DELIVERY]: 'Order is out for delivery',
+    [OrderStatus.DELIVERED]: 'Order delivered successfully',
+    [OrderStatus.CANCELLED]: 'Order cancelled',
+    [OrderStatus.REFUNDED]: 'Order refunded',
+  };
+
   // ============================================================
   // PRIVATE HELPER METHODS
   // ============================================================
@@ -263,12 +275,15 @@ export class OrdersService {
       limit,
       filter: { userId },
       sort: { createdAt: -1 },
+      populate: [{ path: 'items.productId', select: 'name price images' }],
     });
   }
 
   /** Get single order for a registered user */
   async getOrderById(orderId: string, userId: string): Promise<OrderDocument> {
-    const order = await this.orderModel.findOne({ orderId, userId });
+    const order = await this.orderModel
+      .findOne({ orderId, userId })
+      .populate('items.productId', 'name price images');
     if (!order) throw new NotFoundException('Order not found');
     return order;
   }
@@ -402,7 +417,7 @@ export class OrdersService {
   // GUEST OPERATIONS
   // ============================================================
 
-  /** Create guest order (with transaction) */
+  /** Create guest order - items sent directly from frontend */
   async createGuestOrder(dto: GuestCheckoutDto): Promise<GuestOrderDocument> {
     const guestOrder = await inTransaction(this.connection, async (session) => {
       const cart = await this.cartModel
@@ -412,23 +427,23 @@ export class OrdersService {
         throw new BadRequestException('Cart is empty');
       }
 
-      const validItems = await this.validateAndGetCartItems(cart, session);
+      // Validate items and get product details
+      const validItems = await this.validateGuestItems(dto.items, session);
       await this.reduceStock(validItems, session);
 
       const [createdGuestOrder] = await this.guestOrderModel.create(
         [
           {
             orderId: generateOrderId(),
-            sessionId: dto.sessionId,
             customerInfo: dto.customerInfo,
             shippingAddress: dto.shippingAddress,
             billingAddress: dto.billingAddress,
             items: validItems.map((item) => ({
               productId: new Types.ObjectId(item.productId),
               quantity: item.quantity,
-              priceAtPurchase: item.priceAtAddedTime,
+              priceAtPurchase: item.price,
             })),
-            totalAmount: cart.totalAmount,
+            totalAmount,
             status: OrderStatus.PENDING,
             isPaid: false,
             notes: [],
@@ -445,9 +460,7 @@ export class OrdersService {
         { session },
       );
 
-      cart.items = [];
-      cart.totalAmount = 0;
-      await cart.save({ session });
+      await guestOrder.populate('items.productId', 'name price images');
 
       return createdGuestOrder;
     });
@@ -469,15 +482,88 @@ export class OrdersService {
     return guestOrder;
   }
 
+  /** Validate guest checkout items and return with prices */
+  private async validateGuestItems(
+    items: Array<{ productId: string; quantity: number }>,
+    session?: ClientSession,
+  ) {
+    const productIds = items
+      .map((item) =>
+        Types.ObjectId.isValid(item.productId)
+          ? new Types.ObjectId(item.productId)
+          : null,
+      )
+      .filter(Boolean) as Types.ObjectId[];
+
+    if (!productIds.length) {
+      throw new BadRequestException('No valid products in cart');
+    }
+
+    const products = await this.productModel
+      .find({ _id: { $in: productIds }, availabilityStatus: 'In Stock' })
+      .select('_id stock price')
+      .session(session || null)
+      .lean();
+
+    if (!products.length) {
+      throw new BadRequestException('All products are unavailable');
+    }
+
+    const productMap = new Map(
+      products.map((p) => [
+        p._id.toString(),
+        { stock: p.stock, price: p.price },
+      ]),
+    );
+
+    const validItems: Array<{
+      productId: string;
+      quantity: number;
+      price: number;
+    }> = [];
+    const errors: string[] = [];
+
+    for (const item of items) {
+      const product = productMap.get(item.productId);
+      if (!product) {
+        errors.push(`Product ${item.productId} not found or unavailable`);
+        continue;
+      }
+      if (product.stock < item.quantity) {
+        errors.push(
+          `${item.productId}: need ${item.quantity}, have ${product.stock}`,
+        );
+        continue;
+      }
+      validItems.push({
+        productId: item.productId,
+        quantity: item.quantity,
+        price: product.price,
+      });
+    }
+
+    if (errors.length > 0) {
+      throw new BadRequestException(`Stock issues: ${errors.join('; ')}`);
+    }
+
+    if (!validItems.length) {
+      throw new BadRequestException('No valid items to order');
+    }
+
+    return validItems;
+  }
+
   /** Track guest order by orderId and email */
   async trackGuestOrder(
     orderId: string,
     email: string,
   ): Promise<GuestOrderDocument> {
-    const guestOrder = await this.guestOrderModel.findOne({
-      orderId,
-      'customerInfo.email': email,
-    });
+    const guestOrder = await this.guestOrderModel
+      .findOne({
+        orderId,
+        'customerInfo.email': email,
+      })
+      .populate('items.productId', 'name price images');
     if (!guestOrder) throw new NotFoundException('Order not found');
     return guestOrder;
   }
@@ -610,6 +696,10 @@ export class OrdersService {
       page,
       limit,
       sort: { createdAt: -1 },
+      populate: [
+        { path: 'userId', select: 'firstName lastName email phone' },
+        { path: 'items.productId', select: 'name price images' },
+      ],
     });
   }
 
@@ -620,11 +710,16 @@ export class OrdersService {
         page,
         limit,
         sort: { createdAt: -1 },
+        populate: [
+          { path: 'userId', select: 'firstName lastName email phone' },
+          { path: 'items.productId', select: 'name price images' },
+        ],
       }),
       this.paginationService.paginate(this.guestOrderModel, {
         page,
         limit,
         sort: { createdAt: -1 },
+        populate: [{ path: 'items.productId', select: 'name price images' }],
       }),
     ]);
 
@@ -655,6 +750,7 @@ export class OrdersService {
   ): Promise<AdminOrderListResponseDto> {
     const {
       orderId,
+      userId,
       email,
       phone,
       customerName,
@@ -679,12 +775,26 @@ export class OrdersService {
 
     let regularOrders: any[] = [];
     if (!guestOrdersOnly) {
+      // Build the filter for regular orders
+      const regularOrderFilter: any = {
+        ...baseFilter,
+        ...(orderId && { orderId: { $regex: orderId, $options: 'i' } }),
+      };
+
+      // Add userId filter - convert string to ObjectId for MongoDB query
+      if (userId) {
+        try {
+          regularOrderFilter.userId = new Types.ObjectId(userId);
+        } catch {
+          // If invalid ObjectId format, use as-is (will return no results)
+          regularOrderFilter.userId = userId;
+        }
+      }
+
       regularOrders = await this.orderModel
-        .find({
-          ...baseFilter,
-          ...(orderId && { orderId: { $regex: orderId, $options: 'i' } }),
-        })
+        .find(regularOrderFilter)
         .populate('userId', 'firstName lastName email phone')
+        .populate('items.productId', 'name price images')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -720,6 +830,7 @@ export class OrdersService {
             ],
           }),
         })
+        .populate('items.productId', 'name price images')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -753,7 +864,7 @@ export class OrdersService {
           },
       itemsCount: order.items?.length || 0,
       items: (order.items || []).map((item: any) => ({
-        productId: item.productId.toString(),
+        productId: item.productId?.toString() || null,
         quantity: item.quantity,
         priceAtPurchase: item.priceAtPurchase,
       })),
@@ -795,6 +906,7 @@ export class OrdersService {
     const regularOrder = await this.orderModel
       .findOne({ orderId })
       .populate('userId', 'firstName lastName email phone')
+      .populate('items.productId', 'name price images')
       .lean();
     if (regularOrder) {
       return {
@@ -815,14 +927,20 @@ export class OrdersService {
         },
         itemsCount: regularOrder.items?.length || 0,
         items: (regularOrder.items || []).map((item: any) => ({
-          productId: item.productId.toString(),
+          productId:
+            item.productId?._id?.toString() || item.productId?.toString(),
+          productName: item.productId?.name,
+          productImage: item.productId?.images?.[0],
           quantity: item.quantity,
           priceAtPurchase: item.priceAtPurchase,
         })),
       };
     }
 
-    const guestOrder = await this.guestOrderModel.findOne({ orderId }).lean();
+    const guestOrder = await this.guestOrderModel
+      .findOne({ orderId })
+      .populate('items.productId', 'name price images')
+      .lean();
     if (guestOrder) {
       return {
         orderId: guestOrder.orderId,
@@ -839,7 +957,10 @@ export class OrdersService {
         },
         itemsCount: guestOrder.items?.length || 0,
         items: (guestOrder.items || []).map((item: any) => ({
-          productId: item.productId.toString(),
+          productId:
+            item.productId?._id?.toString() || item.productId?.toString(),
+          productName: item.productId?.name,
+          productImage: item.productId?.images?.[0],
           quantity: item.quantity,
           priceAtPurchase: item.priceAtPurchase,
         })),
@@ -962,6 +1083,38 @@ export class OrdersService {
     return guestOrder.save();
   }
 
+  /** Update any order status (regular or guest) with smart default reasons */
+  async updateAnyOrderStatus(
+    orderId: string,
+    status: OrderStatus,
+    updatedBy: string,
+    reason?: string,
+  ): Promise<OrderDocument | GuestOrderDocument> {
+    const finalReason =
+      reason ||
+      this.DEFAULT_STATUS_REASONS[status] ||
+      'Status updated by admin';
+
+    // Try regular order first
+    const order = await this.orderModel.findOne({ orderId });
+    if (order) {
+      return this.updateOrderStatus(orderId, status, updatedBy, finalReason);
+    }
+
+    // Try guest order
+    const guestOrder = await this.guestOrderModel.findOne({ orderId });
+    if (guestOrder) {
+      return this.updateGuestOrderStatus(
+        orderId,
+        status,
+        updatedBy,
+        finalReason,
+      );
+    }
+
+    throw new NotFoundException('Order not found');
+  }
+
   /** Add admin note to any order */
   async addAdminNote(
     orderId: string,
@@ -1003,6 +1156,33 @@ export class OrdersService {
 
     const guestOrder = await this.guestOrderModel.findOne({ orderId });
     if (guestOrder) return guestOrder.notes;
+
+    throw new NotFoundException('Order not found');
+  }
+
+  /** Delete a note from an order (admin only) */
+  async deleteOrderNote(orderId: string, noteIndex: number) {
+    // Try regular order first
+    const order = await this.orderModel.findOne({ orderId });
+    if (order) {
+      if (noteIndex < 0 || noteIndex >= order.notes.length) {
+        throw new BadRequestException('Invalid note index');
+      }
+      order.notes.splice(noteIndex, 1);
+      await order.save();
+      return order.notes;
+    }
+
+    // Try guest order
+    const guestOrder = await this.guestOrderModel.findOne({ orderId });
+    if (guestOrder) {
+      if (noteIndex < 0 || noteIndex >= guestOrder.notes.length) {
+        throw new BadRequestException('Invalid note index');
+      }
+      guestOrder.notes.splice(noteIndex, 1);
+      await guestOrder.save();
+      return guestOrder.notes;
+    }
 
     throw new NotFoundException('Order not found');
   }
@@ -1074,6 +1254,7 @@ export class OrdersService {
       limit,
       filter: { 'customerInfo.email': { $regex: email, $options: 'i' } },
       sort: { createdAt: -1 },
+      populate: [{ path: 'items.productId', select: 'name price images' }],
     });
   }
 
@@ -1088,12 +1269,16 @@ export class OrdersService {
       limit,
       filter: { 'customerInfo.phone': { $regex: phone, $options: 'i' } },
       sort: { createdAt: -1 },
+      populate: [{ path: 'items.productId', select: 'name price images' }],
     });
   }
 
   /** Get guest order fulfillment info */
   async getGuestOrderFulfillmentInfo(orderId: string) {
-    const guestOrder = await this.guestOrderModel.findOne({ orderId }).lean();
+    const guestOrder = await this.guestOrderModel
+      .findOne({ orderId })
+      .populate('items.productId', 'name price images')
+      .lean();
     if (!guestOrder) throw new NotFoundException('Guest order not found');
 
     return {

@@ -24,7 +24,7 @@ import { CancelOrderDto } from './dto/cancel-order.dto';
 
 @Controller('orders')
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService) {}
+  constructor(private readonly ordersService: OrdersService) { }
 
   // ============================================================
   // CUSTOMER ENDPOINTS (7)
@@ -193,48 +193,20 @@ export class OrdersController {
     return orderDetails;
   }
 
-  /** PATCH /orders/admin/order/:id/status - Update order status (handles both regular and guest orders) */
+  /** PATCH /orders/admin/order/:id/status - Update order status (sends email to customer, handles both regular and guest orders) */
   @Patch('admin/order/:id/status')
   @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   updateStatus(
     @Param('id') id: string,
-    @Body() body: { status: OrderStatus; reason?: string },
-    @CurrentUser('_id') adminId: string,
+    @Body() body: { status: OrderStatus; adminMessage?: string; trackingNumber?: string },
   ) {
-    return this.ordersService.updateAnyOrderStatus(
+    return this.ordersService.updateOrderOrGuestStatusWithNotification(
       id,
       body.status,
-      adminId,
-      body.reason,
+      body.adminMessage,
+      body.trackingNumber,
     );
-  }
-
-  /** GET /orders/admin/order/:id/notes - Get all notes for an order */
-  @Get('admin/order/:id/notes')
-  @UseGuards(FirebaseAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  getOrderNotes(@Param('id') orderId: string) {
-    return this.ordersService.getAllOrderNotes(orderId);
-  }
-
-  /** DELETE /orders/admin/order/:id/notes/:noteIndex - Delete a note from an order */
-  @Delete('admin/order/:id/notes/:noteIndex')
-  @UseGuards(FirebaseAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  deleteOrderNote(
-    @Param('id') orderId: string,
-    @Param('noteIndex') noteIndex: string,
-  ) {
-    return this.ordersService.deleteOrderNote(orderId, parseInt(noteIndex, 10));
-  }
-
-  /** GET /orders/admin/order/:id/history - Get status history for an order */
-  @Get('admin/order/:id/history')
-  @UseGuards(FirebaseAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  getStatusHistory(@Param('id') orderId: string) {
-    return this.ordersService.getStatusHistory(orderId);
   }
 
   /** POST /orders/admin/order/:id/notes - Add admin note */

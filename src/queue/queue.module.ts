@@ -1,13 +1,16 @@
 import { Global, Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { REDIS_CLIENT } from 'src/shared/services/storage/providers/redis.provider';
-import { SharedModule } from 'src/shared/shared.module';
 import { RedisProvider } from 'src/shared/services/storage/providers/redis.provider';
 import type { Redis } from 'ioredis';
+
 import { EmailProcessor } from './processors/email.processor';
 import { PaymentProcessor } from './processors/payment.processor';
+
 import { EmailQueueService } from './services/email-queue.service';
 import { PaymentQueueService } from './services/payment-queue.service';
+import { EmailTemplateService } from './services/email-template.service';
+import { ResendProvider } from './services/resend.provider';
 
 @Global()
 @Module({
@@ -31,13 +34,19 @@ import { PaymentQueueService } from './services/payment-queue.service';
     }),
     BullModule.registerQueue({ name: 'email' }, { name: 'payment' }),
   ],
+
   providers: [
     EmailProcessor,
     PaymentProcessor,
     EmailQueueService,
     PaymentQueueService,
     RedisProvider,
+
+    //  Add these
+    EmailTemplateService,
+    ResendProvider,
   ],
+
   exports: [EmailQueueService, PaymentQueueService, REDIS_CLIENT],
 })
-export class QueueModule {}
+export class QueueModule { }

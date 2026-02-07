@@ -21,7 +21,6 @@ import { OrdersModule } from './orders/orders.module';
 import { AdvertsModule } from './adverts/adverts.module';
 // import { PaymentModule } from './payments/payment.module';
 import { CartModule } from './cart/cart.module';
-import { TestEmailModule } from './test-email/test-email.module';
 
 const ServerModules = [
   ScheduleModule.forRoot(),
@@ -47,7 +46,6 @@ const FeatureModules = [
   ProductsModule,
   OrdersModule,
   AdvertsModule,
-  TestEmailModule,
 ];
 
 @Module({

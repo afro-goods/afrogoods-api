@@ -4,6 +4,7 @@
 /build
 /utils
 /scripts
+/test-email
 /test
 
 /utils/*.json

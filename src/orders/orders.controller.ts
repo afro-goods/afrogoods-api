@@ -24,7 +24,7 @@ import { CancelOrderDto } from './dto/cancel-order.dto';
 
 @Controller('orders')
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService) {}
+  constructor(private readonly ordersService: OrdersService) { }
 
   // ============================================================
   // CUSTOMER ENDPOINTS (7)
@@ -193,7 +193,7 @@ export class OrdersController {
     return orderDetails;
   }
 
-  /** PATCH /orders/admin/order/:id/status - Update order status (sends email to customer) */
+  /** PATCH /orders/admin/order/:id/status - Update order status (sends email to customer, handles both regular and guest orders) */
   @Patch('admin/order/:id/status')
   @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)

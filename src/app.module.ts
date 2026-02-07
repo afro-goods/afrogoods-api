@@ -23,10 +23,6 @@ import { AdvertsModule } from './adverts/adverts.module';
 import { CartModule } from './cart/cart.module';
 import { TestEmailModule } from './test-email/test-email.module';
 
-//import { GuestSessionModule } from './guest-session/guest-session.module';
-// import { ReviewModule } from './reviews/review.module';
-// import { NotificationModule } from './notifications/notification.module';
-
 const ServerModules = [
   ScheduleModule.forRoot(),
   MongooseModule.forRootAsync({
@@ -42,7 +38,6 @@ const ServerModules = [
 const FeatureModules = [
   FirebaseModule,
   CartModule,
-  //GuestSessionModule,
   UsersModule,
   AuthModule,
   SharedModule,
@@ -51,7 +46,8 @@ const FeatureModules = [
   CategoriesModule,
   ProductsModule,
   OrdersModule,
-  TestEmailModule
+  AdvertsModule,
+  TestEmailModule,
 ];
 
 @Module({
@@ -65,4 +61,4 @@ const FeatureModules = [
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

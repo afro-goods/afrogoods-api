@@ -11,6 +11,8 @@ import { UsersService } from '../users/users.service';
 import { EmailQueueService } from '../queue/services/email-queue.service';
 import { RegisterDto } from './dto/register.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { RegisterWithCartDto } from './dto/register-with-cart.dto';
+import { LoginWithCartDto } from './dto/login-with-cart.dto';
 import { UserRole } from 'src/users/interfaces/user.interface';
 import { LoginDto } from './dto/login.dto';
 
@@ -147,5 +149,56 @@ export class AuthService {
       // Don't leak errors; return same message
     }
     return { message: 'If an account exists with this email, you will receive a password reset link.' };
+  }
+
+  async loginWithCartMerge(loginDto: LoginWithCartDto) {
+    // Perform regular login - cart is now managed client-side
+    const loginResult = await this.login(loginDto);
+
+    return {
+      ...loginResult,
+      cartMerged: false,
+    };
+  }
+
+  /**
+   * Create account during checkout with cart transfer
+   */
+  async createAccountWithCartTransfer(
+    registerDto: RegisterWithCartDto,
+    firebaseUid: string,
+    guestOrderIds?: string[],
+  ) {
+    // Register user with cart transfer
+    const registrationResult = await this.registerWithCartTransfer(
+      registerDto,
+      firebaseUid,
+    );
+
+    // TODO: If guest order IDs are provided, associate them with the new user
+    // This would be implemented when order association is needed
+    if (guestOrderIds && guestOrderIds.length > 0) {
+      this.logger.log(
+        `Guest orders ${guestOrderIds.join(', ')} should be associated with user ${registrationResult.user._id.toString()}`,
+      );
+      // Future implementation: Associate guest orders with user account
+    }
+
+    return {
+      ...registrationResult,
+      guestOrdersTransferred: guestOrderIds?.length || 0,
+    };
+  }
+
+  async logout(firebaseUid: string) {
+    try {
+      await this.firebaseAdmin.auth().revokeRefreshTokens(firebaseUid);
+      return { message: 'Logout successful' };
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      throw new UnauthorizedException('Logout failed');
+    }
   }
 }

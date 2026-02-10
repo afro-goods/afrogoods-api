@@ -155,7 +155,21 @@ export class ProductsService {
     }
 
     if (category) {
-      filter.category = category;
+      // Check if this is a parent category with subcategories
+      const subcategories =
+        await this.categoriesService.findSubcategories(category);
+
+      if (subcategories.length > 0) {
+        // Include products from parent category AND all subcategories
+        const categoryIds = [
+          new Types.ObjectId(category),
+          ...subcategories.map((sub) => new Types.ObjectId((sub as any)._id)),
+        ];
+        filter.category = { $in: categoryIds };
+      } else {
+        // No subcategories, filter by this category only
+        filter.category = new Types.ObjectId(category);
+      }
     }
 
     const result = await this.paginationService.paginate(this.productModel, {
@@ -169,7 +183,7 @@ export class ProductsService {
             ? { price: -1 }
             : { createdAt: -1 },
       populate: [
-        { path: 'category', select: 'name description isActive' },
+        { path: 'category', select: 'name description isActive parentId' },
         { path: 'attributes' },
       ],
     });

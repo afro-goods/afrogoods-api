@@ -12,14 +12,13 @@ import {
   SendOrderStatusUpdateEmailDto,
   SendAdminCommunicationEmailDto,
   SendCancellationConfirmationEmailDto,
-  SendShippingNotificationEmailDto,
 } from '../dto/order-email-job.dto';
 
 @Injectable()
 export class EmailQueueService {
   private readonly logger = new Logger(EmailQueueService.name);
 
-  constructor(@InjectQueue('email') private emailQueue: Queue) { }
+  constructor(@InjectQueue('email') private emailQueue: Queue) {}
 
   /**
    * Generic method to add email jobs to queue
@@ -107,7 +106,7 @@ export class EmailQueueService {
         shippingAddress: dto.orderDetails.shippingAddress || {},
         paymentMethod: dto.orderDetails.paymentMethod || 'Credit Card',
         appUrl: process.env.APP_URL || 'https://afrogoods.com',
-        ...dto.orderDetails
+        ...dto.orderDetails,
       },
     };
 
@@ -129,7 +128,7 @@ export class EmailQueueService {
         newStatus: dto.statusData.newStatus,
         updateDate: new Date(),
         appUrl: process.env.APP_URL || 'https://afrogoods.com',
-        ...dto.statusData
+        ...dto.statusData,
       },
     };
 
@@ -171,28 +170,14 @@ export class EmailQueueService {
         items: dto.cancellationData.items || [],
         hasRefund: dto.cancellationData.refundAmount > 0,
         refundAmount: dto.cancellationData.refundAmount,
-        refundMethod: dto.cancellationData.refundMethod || 'Original Payment Method',
+        refundMethod:
+          dto.cancellationData.refundMethod || 'Original Payment Method',
         refundTimeline: dto.cancellationData.refundTimeline,
         appUrl: process.env.APP_URL || 'https://afrogoods.com',
         supportEmail: 'support@afrogoods.com',
-        ...dto.cancellationData,
       },
     };
 
     return this.sendEmail(emailJob, 2); // High priority for cancellation confirmations
-  }
-
-  /**
-   * Send shipping notification email
-   */
-  async sendShippingNotificationEmail(dto: SendShippingNotificationEmailDto) {
-    const emailJob: EmailJobDto = {
-      to: dto.email,
-      subject: `Your Order ${dto.orderId} Has Shipped`,
-      template: 'shipping-notification',
-      data: { orderId: dto.orderId, ...dto.shippingData },
-    };
-
-    return this.sendEmail(emailJob, 3); // Medium-high priority
   }
 }

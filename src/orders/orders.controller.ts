@@ -3,12 +3,12 @@ import {
   Post,
   Get,
   Patch,
-  Delete,
   Param,
   Body,
   UseGuards,
   Query,
   NotFoundException,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { OrderStatus } from './enums/order-status.enum';
@@ -21,10 +21,12 @@ import { GuestCheckoutDto } from './dto/guest-checkout.dto';
 import { AdminOrderSearchDto } from './dto/admin-order-search.dto';
 import { UpdateShippingAddressDto } from './dto/update-shipping-address.dto';
 import { CancelOrderDto } from './dto/cancel-order.dto';
+import { UpdateFulfillmentStatusDto } from './dto/update-fulfillment-status.dto';
+import { UpdateFulfillmentTrackingDto } from './dto/update-fulfillment-tracking.dto';
 
 @Controller('orders')
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService) { }
+  constructor(private readonly ordersService: OrdersService) {}
 
   // ============================================================
   // CUSTOMER ENDPOINTS (7)
@@ -97,6 +99,11 @@ export class OrdersController {
   @UseGuards(FirebaseAuthGuard)
   mockPay(@Param('id') id: string, @CurrentUser('_id') userId: string) {
     return this.ordersService.mockPay(id, userId);
+  }
+
+  @Post('guest/:id/mock-pay')
+  mockPayOrder(@Param('id') id: string) {
+    return this.ordersService.mockPayGuest(id);
   }
 
   // ============================================================
@@ -197,16 +204,20 @@ export class OrdersController {
   @Patch('admin/order/:id/status')
   @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
-  updateStatus(
+  async updateStatus(
     @Param('id') id: string,
-    @Body() body: { status: OrderStatus; adminMessage?: string; trackingNumber?: string },
+    @Body()
+    body: {
+      status: OrderStatus;
+      adminMessage?: string;
+    },
   ) {
-    return this.ordersService.updateOrderOrGuestStatusWithNotification(
+    const result = await this.ordersService.updateOrderStatus(
       id,
       body.status,
       body.adminMessage,
-      body.trackingNumber,
     );
+    return result.order;
   }
 
   /** POST /orders/admin/order/:id/notes - Add admin note */
@@ -224,5 +235,49 @@ export class OrdersController {
       noteDto.content,
       noteDto.visibleToCustomer ?? false,
     );
+  }
+
+  // ============================================================
+  // FULFILLMENT MANAGEMENT ENDPOINTS (Admin)
+  // ============================================================
+
+  /** PATCH /orders/admin/order/:orderId/fulfillments/:index/status - Update fulfillment status */
+  @Patch('admin/order/:orderId/fulfillments/:index/status')
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async updateFulfillmentStatus(
+    @Param('orderId') orderId: string,
+    @Param('index', ParseIntPipe) fulfillmentIndex: number,
+    @Body() dto: UpdateFulfillmentStatusDto,
+  ) {
+    const result = await this.ordersService.updateFulfillmentStatus(
+      orderId,
+      fulfillmentIndex,
+      dto.status,
+      dto.reason,
+    );
+    return result.order;
+  }
+
+  /** PATCH /orders/admin/order/:orderId/fulfillments/:index/tracking - Update fulfillment tracking */
+  @Patch('admin/order/:orderId/fulfillments/:index/tracking')
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async updateFulfillmentTracking(
+    @Param('orderId') orderId: string,
+    @Param('index', ParseIntPipe) fulfillmentIndex: number,
+    @Body() dto: UpdateFulfillmentTrackingDto,
+  ) {
+    const result = await this.ordersService.updateFulfillmentTracking(
+      orderId,
+      fulfillmentIndex,
+      dto.trackingNumber,
+      dto.trackingUrl,
+      dto.estimatedDeliveryDate
+        ? new Date(dto.estimatedDeliveryDate)
+        : undefined,
+      dto.carrier,
+    );
+    return result.order;
   }
 }

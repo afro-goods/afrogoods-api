@@ -9,20 +9,26 @@ export const RedisProvider: Provider<Redis> = {
   useFactory: (): Redis => {
     let redisClient: Redis;
 
+    const commonOptions = {
+      maxRetriesPerRequest: null, // Required for BullMQ shared connection
+      enableOfflineQueue: false, // Recommended for cloud Redis (Upstash)
+      lazyConnect: true,
+      retryStrategy: (times: number) => {
+        // Reconnect after increasing delays, max 30 seconds
+        const delay = Math.min(times * 1000, 30000);
+        return delay;
+      },
+    };
+
     if (config.redis.url) {
-      redisClient = new Redis(config.redis.url, {
-        maxRetriesPerRequest: null, // ← REQUIRED for BullMQ shared connection
-        enableOfflineQueue: false, // ← Recommended for Upstash
-        lazyConnect: true,
-      });
+      redisClient = new Redis(config.redis.url, commonOptions);
     } else {
       redisClient = new Redis({
         host: config.redis.host,
         port: config.redis.port,
         password: config.redis.password,
         tls: config.env.isProd ? {} : undefined,
-        maxRetriesPerRequest: null, // ← Also here for consistency
-        enableOfflineQueue: false,
+        ...commonOptions,
       });
     }
 
@@ -31,10 +37,17 @@ export const RedisProvider: Provider<Redis> = {
     });
 
     redisClient.on('error', (err: any) => {
-      if (err.code === 'ECONNRESET') {
+      // Silently ignore ECONNRESET - common in local dev, Redis will auto-reconnect
+      if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED') {
         return;
       }
-      console.error('Redis connection error:', err);
+      console.error('Redis connection error:', err.message);
+    });
+
+    redisClient.on('reconnecting', () => {
+      if (!config.env.isProd) {
+        console.log('Redis reconnecting...');
+      }
     });
 
     return redisClient;

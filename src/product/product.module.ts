@@ -7,12 +7,14 @@ import { PaginationService } from 'src/shared/services/pagination/services/pagin
 import { MediaService } from 'src/shared/services/media/services/media.service';
 import { AttributesModule } from '../attributes/attributes.module';
 import { CategoriesModule } from '../categories/categories.module';
+import { SharedModule } from 'src/shared/shared.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Product.name, schema: ProductSchema }]),
     AttributesModule,
     CategoriesModule,
+    SharedModule,
   ],
   controllers: [ProductsController],
   providers: [ProductsService, PaginationService, MediaService],

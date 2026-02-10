@@ -22,18 +22,36 @@ import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import { User } from 'src/users/schemas/user.schema';
 
 @Controller('adverts')
-@UseGuards(FirebaseAuthGuard)
 export class AdvertsController {
   constructor(private readonly advertsService: AdvertsService) {}
 
-  /** ---------------- Customer Endpoints ---------------- */
+  /** ---------------- Public Endpoints ---------------- */
+
+  @Get()
+  async findAll(@Query() query: AdvertQueryDto) {
+    return this.advertsService.findAll(query);
+  }
+
+  /** ---------------- Customer Endpoints (Auth Required) ---------------- */
+
+  @Get('me')
+  @UseGuards(FirebaseAuthGuard)
+  async myAdverts(@CurrentUser() user: User) {
+    const query = new AdvertQueryDto();
+    query.page = 1;
+    query.limit = 50;
+    query.owner = user._id.toString();
+    return this.advertsService.findAll(query);
+  }
 
   @Post()
+  @UseGuards(FirebaseAuthGuard)
   async create(@Body() dto: CreateAdvertDto, @CurrentUser() user: User) {
     return this.advertsService.create(dto, user._id.toString());
   }
 
   @Patch(':id')
+  @UseGuards(FirebaseAuthGuard)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateAdvertDto,
@@ -43,24 +61,16 @@ export class AdvertsController {
   }
 
   @Delete(':id')
+  @UseGuards(FirebaseAuthGuard)
   async remove(@Param('id') id: string, @CurrentUser() user: User) {
     return this.advertsService.remove(id, user._id.toString());
   }
 
-  @Get('me')
-  async myAdverts(@CurrentUser() user: User) {
-    const query = new AdvertQueryDto();
-    query.page = 1;
-    query.limit = 50;
-    query.owner = user._id.toString();
-    return this.advertsService.findAll(query);
-  }
-
   /** ---------------- Admin Endpoints ---------------- */
 
-  @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
   @Patch(':id/review')
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   async review(
     @Param('id') id: string,
     @Body() dto: ReviewAdvertDto,
@@ -69,12 +79,7 @@ export class AdvertsController {
     return this.advertsService.review(id, dto, admin._id.toString());
   }
 
-  /** ---------------- Hub / Public Endpoints ---------------- */
-
-  @Get()
-  async findAll(@Query() query: AdvertQueryDto) {
-    return this.advertsService.findAll(query);
-  }
+  /** ---------------- Public Endpoints (with param) ---------------- */
 
   @Get(':id')
   async findOne(@Param('id') id: string) {

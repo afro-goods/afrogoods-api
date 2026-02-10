@@ -8,9 +8,6 @@ export class AdvertQueryDto extends PaginationDto {
   @IsEnum(AdvertType)
   type?: AdvertType;
 
-  /**
-   * Category ID - filter by category (must be a valid MongoDB ObjectId)
-   */
   @IsOptional()
   @IsMongoId()
   category?: string;

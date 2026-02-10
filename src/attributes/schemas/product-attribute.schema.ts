@@ -18,7 +18,7 @@ export const AttributeOptionSchema =
 
 @Schema({ timestamps: true })
 export class ProductAttribute {
-  @Prop({ type: Types.ObjectId, ref: 'Product', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'Product', required: true })
   productId: Types.ObjectId;
 
   @Prop({ required: true, trim: true })

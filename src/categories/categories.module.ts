@@ -5,6 +5,7 @@ import { CategoriesController } from './categories.controller';
 import { Category, CategorySchema } from './schemas/category.schema';
 import { Product, ProductSchema } from '../product/schemas/product.schema';
 import { Advert, AdvertSchema } from '../adverts/schemas/advert.schema';
+import { SharedModule } from '../shared/shared.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { Advert, AdvertSchema } from '../adverts/schemas/advert.schema';
       { name: Product.name, schema: ProductSchema },
       { name: Advert.name, schema: AdvertSchema },
     ]),
+    SharedModule,
   ],
   controllers: [CategoriesController],
   providers: [CategoriesService],

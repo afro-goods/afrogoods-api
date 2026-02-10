@@ -14,6 +14,11 @@ import { ReviewAdvertDto } from './dto/review-advert.dto';
 import { AdvertQueryDto } from './dto/advert-query.dto';
 import { PaginationService } from 'src/shared/services/pagination/services/pagination.service';
 import { CategoriesService } from '../categories/categories.service';
+import {
+  CacheService,
+  CacheKeyBuilder,
+  CacheTTL,
+} from 'src/shared/services/cache';
 import { CategoryType } from '../categories/enums/category-type.enum';
 import { AdvertStatus } from './enums/advert-status.enum';
 
@@ -28,6 +33,7 @@ export class AdvertsService {
     @InjectModel(Advert.name) private advertModel: Model<AdvertDocument>,
     private readonly paginationService: PaginationService,
     private readonly categoriesService: CategoriesService,
+    private readonly cacheService: CacheService,
   ) {}
 
   /**
@@ -80,7 +86,12 @@ export class AdvertsService {
       status: AdvertStatus.PENDING,
     });
 
-    return advert.save();
+    const savedAdvert = await advert.save();
+
+    // Invalidate advert list caches
+    await this.cacheService.deleteByPattern(CacheKeyBuilder.advertPattern());
+
+    return savedAdvert;
   }
 
   /** Review advert - approve or reject (admin) */
@@ -98,7 +109,12 @@ export class AdvertsService {
     }
     advert.reviewedBy = new Types.ObjectId(adminId);
 
-    return advert.save();
+    const savedAdvert = await advert.save();
+
+    // Invalidate all advert caches (status change affects active adverts)
+    await this.cacheService.deleteByPattern(CacheKeyBuilder.advertPattern());
+
+    return savedAdvert;
   }
 
   /** Hub / admin listing with pagination & filters */
@@ -128,14 +144,24 @@ export class AdvertsService {
 
   /** Find one advert with full details */
   async findOne(id: string): Promise<Advert> {
+    // Try cache first
+    const cacheKey = CacheKeyBuilder.advertSingle(id);
+    const cached = await this.cacheService.get<Advert>(cacheKey);
+    if (cached) return cached;
+
     const advert = await this.advertModel
       .findById(id)
       .populate('owner', 'firstName lastName email phoneNumber photoUrl')
       .populate('category', 'name description')
       .populate('reviewedBy', 'firstName lastName')
+      .lean()
       .exec();
 
     if (!advert) throw new NotFoundException('Advert not found');
+
+    // Cache the result
+    await this.cacheService.set(cacheKey, advert, CacheTTL.ADVERT_SINGLE);
+
     return advert;
   }
 
@@ -158,7 +184,13 @@ export class AdvertsService {
     }
 
     Object.assign(advert, dto);
-    return advert.save();
+    const savedAdvert = await advert.save();
+
+    // Invalidate specific advert and list caches
+    await this.cacheService.delete(CacheKeyBuilder.advertSingle(id));
+    await this.cacheService.deleteByPattern(CacheKeyBuilder.advertPattern());
+
+    return savedAdvert;
   }
 
   /** Delete advert (customer deletes their own advert) */
@@ -166,6 +198,13 @@ export class AdvertsService {
     const res = await this.advertModel
       .deleteOne({ _id: id, owner: new Types.ObjectId(ownerId) })
       .exec();
+
+    if (res.deletedCount > 0) {
+      // Invalidate specific advert and list caches
+      await this.cacheService.delete(CacheKeyBuilder.advertSingle(id));
+      await this.cacheService.deleteByPattern(CacheKeyBuilder.advertPattern());
+    }
+
     return { deleted: res.deletedCount > 0 };
   }
 
@@ -183,6 +222,8 @@ export class AdvertsService {
 
     if (res.modifiedCount > 0) {
       this.logger.log(`Expired ${res.modifiedCount} advert(s)`);
+      // Invalidate all advert caches
+      await this.cacheService.deleteByPattern(CacheKeyBuilder.advertPattern());
     }
 
     return res.modifiedCount;

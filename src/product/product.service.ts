@@ -9,6 +9,11 @@ import { PaginationService } from 'src/shared/services/pagination/services/pagin
 import { MediaService } from 'src/shared/services/media/services/media.service';
 import { AttributesService } from '../attributes/attributes.service';
 import { CategoriesService } from '../categories/categories.service';
+import {
+  CacheService,
+  CacheKeyBuilder,
+  CacheTTL,
+} from 'src/shared/services/cache';
 import { inTransaction } from 'src/utilities/transaction';
 import { cleanBase64 } from 'src/utilities/files';
 import { Connection } from 'mongoose';
@@ -24,12 +29,11 @@ export class ProductsService {
     private readonly mediaService: MediaService,
     private readonly attributesService: AttributesService,
     private readonly categoriesService: CategoriesService,
+    private readonly cacheService: CacheService,
   ) {}
 
-  // ---------- PRODUCT ----------
   async createProduct(dto: CreateProductDto) {
     return await inTransaction(this.connection, async (session) => {
-      // Validate category exists using categories service
       const categoryExists = await this.categoriesService.checkCategoryExists(
         dto.category,
       );
@@ -66,7 +70,7 @@ export class ProductsService {
         category: new Types.ObjectId(dto.category),
         price: dto.price,
         stock: dto.stock,
-        currency: 'CAD', // Default currency
+        currency: 'CAD',
         images: imageUrls,
         availabilityStatus: dto.availabilityStatus || 'In Stock',
         brand: dto.brand,
@@ -113,12 +117,31 @@ export class ProductsService {
         .populate('attributes')
         .session(session);
 
+      // Invalidate product list caches
+      await this.cacheService.deleteByPattern(
+        CacheKeyBuilder.productListPattern(),
+      );
+      await this.cacheService.deleteByPattern('products:featured:*');
+
       return populatedProduct;
     });
   }
 
   async findAllProducts(query: ProductQueryDto) {
     const { page, limit, search, category, sort } = query;
+
+    // Only cache non-search queries (search results are too dynamic)
+    if (!search) {
+      const cacheKey = CacheKeyBuilder.productList(
+        page || 1,
+        limit || 10,
+        category,
+      );
+      const cached = await this.cacheService.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
 
     const filter: any = {
       availabilityStatus: { $in: ['Draft', 'Out of Stock', 'In Stock'] },
@@ -150,6 +173,16 @@ export class ProductsService {
         { path: 'attributes' },
       ],
     });
+
+    // Cache non-search results
+    if (!search) {
+      const cacheKey = CacheKeyBuilder.productList(
+        page || 1,
+        limit || 10,
+        category,
+      );
+      await this.cacheService.set(cacheKey, result, CacheTTL.PRODUCT_LIST);
+    }
 
     return result;
   }
@@ -190,9 +223,17 @@ export class ProductsService {
   }
 
   async findProductById(id: string) {
+    // Try cache first
+    const cacheKey = CacheKeyBuilder.productSingle(id);
+    const cached = await this.cacheService.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const product = await this.productModel
       .findById(id)
       .populate('category', 'name description isActive')
+      .populate('attributes')
       .lean()
       .exec();
 
@@ -200,13 +241,36 @@ export class ProductsService {
       throw new NotFoundException('Product not found');
     }
 
-    // Get product attributes separately
-    const attributes = await this.attributesService.getProductAttributes(id);
+    // Cache the result
+    await this.cacheService.set(cacheKey, product, CacheTTL.PRODUCT_SINGLE);
 
-    return {
-      ...product,
-      attributeDetails: attributes,
-    };
+    return product;
+  }
+
+  async getFeaturedProducts(limit: number = 8) {
+    // Try cache first
+    const cacheKey = `products:featured:${limit}`;
+    const cached = await this.cacheService.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    // Return products that are in stock, sorted by newest first
+    // In the future, this can be enhanced to sort by sales count once order tracking is implemented
+    const products = await this.productModel
+      .find({
+        availabilityStatus: 'In Stock',
+      })
+      .sort({ createdAt: -1 })
+      .limit(Math.min(limit, 20)) // Cap at 20 max
+      .populate('category', 'name description isActive')
+      .lean()
+      .exec();
+
+    // Cache the result
+    await this.cacheService.set(cacheKey, products, CacheTTL.PRODUCT_LIST);
+
+    return products;
   }
 
   async updateProduct(id: string, dto: UpdateProductDto) {
@@ -294,6 +358,13 @@ export class ProductsService {
         .populate('category', 'name description isActive')
         .populate('attributes');
 
+      // Invalidate caches: specific product + all list caches
+      await this.cacheService.delete(CacheKeyBuilder.productSingle(id));
+      await this.cacheService.deleteByPattern(
+        CacheKeyBuilder.productListPattern(),
+      );
+      await this.cacheService.deleteByPattern('products:featured:*');
+
       return updatedProduct;
     });
   }
@@ -313,6 +384,13 @@ export class ProductsService {
       );
 
       await this.productModel.findByIdAndDelete(id).session(session);
+
+      // Invalidate caches: specific product + all list caches
+      await this.cacheService.delete(CacheKeyBuilder.productSingle(id));
+      await this.cacheService.deleteByPattern(
+        CacheKeyBuilder.productListPattern(),
+      );
+      await this.cacheService.deleteByPattern('products:featured:*');
 
       return { message: 'Product deleted successfully' };
     });

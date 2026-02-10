@@ -49,27 +49,7 @@ export class SendCancellationConfirmationEmailDto {
     refundTimeline: string;
     cancellationReason: string;
     orderTotal: number;
-  };
-}
-
-export class SendShippingNotificationEmailDto {
-  @IsEmail()
-  @IsNotEmpty()
-  email: string;
-
-  @IsString()
-  @IsNotEmpty()
-  orderId: string;
-
-  @IsObject()
-  @IsNotEmpty()
-  shippingData: {
-    customerName: string;
-    trackingNumber?: string;
-    estimatedDelivery?: string;
-    carrierInfo?: {
-      name: string;
-      trackingUrl?: string;
-    };
+    items?: Array<{ name: string; quantity: number; price: number }>;
+    refundMethod?: string;
   };
 }

@@ -1,5 +1,14 @@
-import { IsString, IsOptional, IsBoolean, IsEnum } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsEnum,
+  IsMongoId,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { CategoryType } from '../enums/category-type.enum';
+import { FileInput } from 'src/shared/inputs/file.input';
 
 export class CreateCategoryDto {
   @IsString()
@@ -16,4 +25,15 @@ export class CreateCategoryDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  // Optional parent for creating subcategories
+  @IsOptional()
+  @IsMongoId()
+  parentId?: string;
+
+  // Optional image for category
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => FileInput)
+  image?: FileInput;
 }

@@ -8,6 +8,7 @@ import { Cart, CartSchema } from '../cart/schemas/cart.schema';
 import { Product, ProductSchema } from '../product/schemas/product.schema';
 import { AuthModule } from '../auth/auth.module';
 import { OrdersEmailService } from './services/orders-email.service';
+import { FulfillmentGroupingService } from './services/fulfillment-grouping.service';
 import { PaginationService } from '../shared/services/pagination/services/pagination.service';
 
 @Module({
@@ -24,11 +25,9 @@ import { PaginationService } from '../shared/services/pagination/services/pagina
   providers: [
     OrdersService,
     OrdersEmailService,
+    FulfillmentGroupingService,
     PaginationService,
   ],
-  exports: [
-    OrdersService,
-    OrdersEmailService,
-  ],
+  exports: [OrdersService, OrdersEmailService, FulfillmentGroupingService],
 })
 export class OrdersModule {}

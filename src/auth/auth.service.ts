@@ -4,27 +4,22 @@ import {
   UnauthorizedException,
   ConflictException,
   BadRequestException,
-  Logger,
 } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 import { UsersService } from '../users/users.service';
 import { EmailQueueService } from '../queue/services/email-queue.service';
 import { RegisterDto } from './dto/register.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
-import { RegisterWithCartDto } from './dto/register-with-cart.dto';
-import { LoginWithCartDto } from './dto/login-with-cart.dto';
 import { UserRole } from 'src/users/interfaces/user.interface';
 import { LoginDto } from './dto/login.dto';
 
 @Injectable()
 export class AuthService {
-  private readonly logger = new Logger(AuthService.name);
-
   constructor(
     @Inject('FIREBASE_ADMIN') private firebaseAdmin: typeof admin,
     private usersService: UsersService,
     private emailQueueService: EmailQueueService,
-  ) { }
+  ) {}
 
   async register(registerDto: RegisterDto, firebaseUid: string) {
     try {
@@ -83,20 +78,6 @@ export class AuthService {
     }
   }
 
-  async registerWithCartTransfer(
-    registerDto: RegisterWithCartDto,
-    firebaseUid: string,
-  ) {
-    const registrationResult = await this.register(registerDto, firebaseUid);
-
-    // Cart transfer is now handled by frontend sending cart items directly
-    // No server-side guest session cart to merge
-    return {
-      ...registrationResult,
-      cartMerged: false,
-    };
-  }
-
   async login(loginDto: LoginDto) {
     try {
       const { idToken } = loginDto;
@@ -131,14 +112,25 @@ export class AuthService {
    * Request password reset: find user by email, generate Firebase reset link, send email.
    * Always returns success to avoid leaking whether the email exists.
    */
-  async requestPasswordReset(dto: ForgotPasswordDto): Promise<{ message: string }> {
+  async requestPasswordReset(
+    dto: ForgotPasswordDto,
+  ): Promise<{ message: string }> {
     const user = await this.usersService.findByUsernameOrEmail(dto.email);
-    if (!user || !user.email || user.email.toLowerCase() !== dto.email.toLowerCase()) {
-      return { message: 'If an account exists with this email, you will receive a password reset link.' };
+    if (
+      !user ||
+      !user.email ||
+      user.email.toLowerCase() !== dto.email.toLowerCase()
+    ) {
+      return {
+        message:
+          'If an account exists with this email, you will receive a password reset link.',
+      };
     }
 
     try {
-      const resetLink = await this.firebaseAdmin.auth().generatePasswordResetLink(dto.email);
+      const resetLink = await this.firebaseAdmin
+        .auth()
+        .generatePasswordResetLink(dto.email);
       const name = user.firstName || 'there';
       await this.emailQueueService.sendPasswordResetEmail({
         email: user.email,
@@ -148,45 +140,9 @@ export class AuthService {
     } catch {
       // Don't leak errors; return same message
     }
-    return { message: 'If an account exists with this email, you will receive a password reset link.' };
-  }
-
-  async loginWithCartMerge(loginDto: LoginWithCartDto) {
-    // Perform regular login - cart is now managed client-side
-    const loginResult = await this.login(loginDto);
-
     return {
-      ...loginResult,
-      cartMerged: false,
-    };
-  }
-
-  /**
-   * Create account during checkout with cart transfer
-   */
-  async createAccountWithCartTransfer(
-    registerDto: RegisterWithCartDto,
-    firebaseUid: string,
-    guestOrderIds?: string[],
-  ) {
-    // Register user with cart transfer
-    const registrationResult = await this.registerWithCartTransfer(
-      registerDto,
-      firebaseUid,
-    );
-
-    // TODO: If guest order IDs are provided, associate them with the new user
-    // This would be implemented when order association is needed
-    if (guestOrderIds && guestOrderIds.length > 0) {
-      this.logger.log(
-        `Guest orders ${guestOrderIds.join(', ')} should be associated with user ${registrationResult.user._id.toString()}`,
-      );
-      // Future implementation: Associate guest orders with user account
-    }
-
-    return {
-      ...registrationResult,
-      guestOrdersTransferred: guestOrderIds?.length || 0,
+      message:
+        'If an account exists with this email, you will receive a password reset link.',
     };
   }
 

@@ -4,7 +4,6 @@ import {
   SendOrderStatusUpdateEmailDto,
   SendAdminCommunicationEmailDto,
   SendCancellationConfirmationEmailDto,
-  SendShippingNotificationEmailDto,
 } from '../../queue/dto/order-email-job.dto';
 import { SendOrderConfirmationEmailDto } from '../../queue/dto/email-job.dto';
 
@@ -102,34 +101,5 @@ export class OrdersEmailService {
     };
 
     await this.emailQueueService.sendCancellationConfirmationEmail(dto);
-  }
-
-  /**
-   * Send shipping notification email
-   */
-  async sendShippingNotificationEmail(
-    email: string,
-    orderId: string,
-    shippingData: {
-      customerName: string;
-      trackingNumber?: string;
-      estimatedDelivery?: string;
-      carrierInfo?: {
-        name: string;
-        trackingUrl?: string;
-      };
-    },
-  ): Promise<void> {
-    this.logger.log(
-      `Queuing shipping notification email for ${email}, order: ${orderId}`,
-    );
-
-    const dto: SendShippingNotificationEmailDto = {
-      email,
-      orderId,
-      shippingData,
-    };
-
-    await this.emailQueueService.sendShippingNotificationEmail(dto);
   }
 }

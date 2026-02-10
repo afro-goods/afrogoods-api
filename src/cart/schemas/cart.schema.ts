@@ -21,5 +21,4 @@ export type CartDocument = Cart & Document;
 export const CartSchema = SchemaFactory.createForClass(Cart);
 
 // Indexes for efficient lookups
-CartSchema.index({ userId: 1 });
 CartSchema.index({ status: 1 });

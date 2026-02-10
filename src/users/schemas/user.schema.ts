@@ -48,6 +48,10 @@ export const UserSchema = SchemaFactory.createForClass(User);
 
 // Indexes for efficient lookups
 UserSchema.index({ role: 1, createdAt: -1 });
-UserSchema.index({ email: 1 });
-UserSchema.index({ firstName: 'text', lastName: 'text', email: 'text', username: 'text' }); // Text index for search
+UserSchema.index({
+  firstName: 'text',
+  lastName: 'text',
+  email: 'text',
+  username: 'text',
+});
 UserSchema.index({ createdAt: -1 });

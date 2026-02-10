@@ -25,7 +25,8 @@ export class CustomerInfoDto {
   @IsEmail()
   email: string;
 
-  @IsPhoneNumber()
+  @IsString()
+  @IsNotEmpty()
   phone: string;
 }
 

@@ -28,6 +28,11 @@ export class ProductsController {
     return this.productsService.findAllProducts(query);
   }
 
+  @Get('featured')
+  getFeaturedProducts(@Query('limit') limit: number = 8) {
+    return this.productsService.getFeaturedProducts(limit);
+  }
+
   @Get('all')
   @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)

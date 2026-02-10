@@ -1,9 +1,3 @@
-// Node 18: global crypto is not defined; @nestjs/schedule uses crypto.randomUUID()
-import { randomUUID } from 'node:crypto';
-if (typeof (globalThis as any).crypto?.randomUUID !== 'function') {
-  (globalThis as any).crypto = { randomUUID };
-}
-
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { config } from './config';
@@ -12,7 +6,11 @@ import { ValidationPipe } from '@nestjs/common';
 
 const origins: Record<string, string[]> = {
   production: [''],
-  development: ['http://192.168.0.198:5173', 'http://localhost:5173'],
+  development: [
+    'http://192.168.0.198:5173',
+    'http://localhost:5173',
+    'http://localhost:5174',
+  ],
   test: ['http://localhost:3000'],
 };
 

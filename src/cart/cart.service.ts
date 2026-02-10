@@ -147,7 +147,8 @@ export class CartService {
       .findOne({ userId: userObjectId })
       .populate({
         path: 'items.productId',
-        select: 'name price description images stock isActive',
+        select:
+          'name price description images stock isActive deliveryTimeUnit deliveryMinTime deliveryMaxTime',
       })
       .lean()
       .exec();
@@ -168,6 +169,9 @@ export class CartService {
           quantity: item.quantity,
           priceAtAddedTime: item.priceAtAddedTime,
           selectedAttributes: item.selectedAttributes || {},
+          deliveryTimeUnit: item.productId.deliveryTimeUnit,
+          deliveryMinTime: item.productId.deliveryMinTime,
+          deliveryMaxTime: item.productId.deliveryMaxTime,
         })),
       totalAmount: cart.totalAmount,
     };

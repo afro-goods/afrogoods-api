@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
-import { RegisterWithCartDto } from './dto/register-with-cart.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -25,15 +24,6 @@ export class AuthController {
     @CurrentUser('firebaseUid') firebaseUid: string,
   ) {
     return this.authService.register(registerDto, firebaseUid);
-  }
-
-  @Post('register-with-cart')
-  @UseGuards(FirebaseRegisterGuard)
-  async registerWithCart(
-    @Body() registerDto: RegisterWithCartDto,
-    @CurrentUser('firebaseUid') firebaseUid: string,
-  ) {
-    return this.authService.registerWithCartTransfer(registerDto, firebaseUid);
   }
 
   @Post('login')

@@ -7,7 +7,8 @@ import * as path from 'path';
 export class EmailTemplateService {
     private readonly logger = new Logger(EmailTemplateService.name);
     private templates: Record<string, Handlebars.TemplateDelegate> = {};
-    private baseLayout: Handlebars.TemplateDelegate;
+    private baseLayout: Handlebars.TemplateDelegate | null = null;
+    private templatesLoaded = false;
 
     constructor() {
         this.loadTemplates();
@@ -16,6 +17,14 @@ export class EmailTemplateService {
 
     private loadTemplates(): void {
         const templatesDir = path.join(__dirname, '../templates');
+
+        // Check if templates directory exists
+        if (!fs.existsSync(templatesDir)) {
+            this.logger.warn(
+                `Templates directory not found: ${templatesDir}. Email templates will not be available.`,
+            );
+            return;
+        }
 
         const templateFiles = [
             'welcomeemail.html',
@@ -28,25 +37,42 @@ export class EmailTemplateService {
         // Load base layout first
         try {
             const layoutPath = path.join(templatesDir, 'base-layout.html');
-            const layoutContent = fs.readFileSync(layoutPath, 'utf-8');
-            this.baseLayout = Handlebars.compile(layoutContent);
-            this.logger.debug('Loaded base layout template');
+            if (fs.existsSync(layoutPath)) {
+                const layoutContent = fs.readFileSync(layoutPath, 'utf-8');
+                this.baseLayout = Handlebars.compile(layoutContent);
+                this.logger.debug('Loaded base layout template');
+            } else {
+                this.logger.warn('Base layout template not found');
+            }
         } catch (error) {
-            this.logger.error(`Failed to load base layout: ${error.message}`);
+            this.logger.warn(`Failed to load base layout: ${error.message}`);
         }
 
         // Load individual templates
+        let loadedCount = 0;
         templateFiles.forEach((file) => {
             try {
                 const templatePath = path.join(templatesDir, file);
-                const templateContent = fs.readFileSync(templatePath, 'utf-8');
-                const templateName = file.replace('.html', '');
-                this.templates[templateName] = Handlebars.compile(templateContent);
-                this.logger.debug(`Loaded template: ${templateName}`);
+                if (fs.existsSync(templatePath)) {
+                    const templateContent = fs.readFileSync(templatePath, 'utf-8');
+                    const templateName = file.replace('.html', '');
+                    this.templates[templateName] = Handlebars.compile(templateContent);
+                    this.logger.debug(`Loaded template: ${templateName}`);
+                    loadedCount++;
+                } else {
+                    this.logger.warn(`Template file not found: ${file}`);
+                }
             } catch (error) {
-                this.logger.error(`Failed to load template ${file}: ${error.message}`);
+                this.logger.warn(`Failed to load template ${file}: ${error.message}`);
             }
         });
+
+        this.templatesLoaded = loadedCount > 0;
+        if (this.templatesLoaded) {
+            this.logger.log(`Loaded ${loadedCount} email templates`);
+        } else {
+            this.logger.warn('No email templates loaded. Emails will use fallback text.');
+        }
     }
 
     private registerHelpers(): void {
@@ -114,9 +140,9 @@ export class EmailTemplateService {
         const template = this.templates[templateName];
 
         if (!template) {
-            const errorMsg = `Template '${templateName}' not found`;
-            this.logger.error(errorMsg);
-            throw new Error(errorMsg);
+            // Return a simple fallback HTML if template not found
+            this.logger.warn(`Template '${templateName}' not found, using fallback`);
+            return this.renderFallback(templateName, data);
         }
 
         try {
@@ -142,8 +168,25 @@ export class EmailTemplateService {
             this.logger.error(
                 `Failed to render template '${templateName}': ${error.message}`,
             );
-            throw error;
+            return this.renderFallback(templateName, data);
         }
+    }
+
+    private renderFallback(templateName: string, data: Record<string, any>): string {
+        // Simple fallback HTML for when templates aren't available
+        const title = templateName.replace(/([A-Z])/g, ' $1').trim();
+        return `
+            <html>
+            <body style="font-family: Arial, sans-serif; padding: 20px;">
+                <h1>AfroGoods</h1>
+                <h2>${title}</h2>
+                <p>Thank you for using AfroGoods.</p>
+                ${data.orderId ? `<p>Order ID: ${data.orderId}</p>` : ''}
+                ${data.customerName ? `<p>Dear ${data.customerName},</p>` : ''}
+                <p>If you have any questions, please contact our support team.</p>
+            </body>
+            </html>
+        `;
     }
 
     getAvailableTemplates(): string[] {

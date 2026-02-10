@@ -17,6 +17,15 @@ import { ResendProvider } from './services/resend.provider';
   imports: [
     BullModule.forRootAsync({
       useFactory: (redisClient: Redis) => {
+        // Suppress ECONNRESET errors in development (common with local Redis)
+        redisClient.on('error', (err: any) => {
+          if (err.code === 'ECONNRESET') {
+            // Silently ignore connection resets - Redis will auto-reconnect
+            return;
+          }
+          console.error('BullMQ Redis error:', err.message);
+        });
+
         return {
           connection: redisClient,
           defaultJobOptions: {
@@ -49,4 +58,4 @@ import { ResendProvider } from './services/resend.provider';
 
   exports: [EmailQueueService, PaymentQueueService, REDIS_CLIENT],
 })
-export class QueueModule { }
+export class QueueModule {}

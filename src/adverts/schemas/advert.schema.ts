@@ -18,7 +18,6 @@ export class Advert extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
   owner: Types.ObjectId;
 
-  /** Advert nature: product | service | job | promotion */
   @Prop({
     required: true,
     enum: AdvertType,
@@ -26,10 +25,6 @@ export class Advert extends Document {
   })
   type: AdvertType;
 
-  /** 
-   * Advert category - references Category collection (type: 'advert')
-   * Previously used AdvertCategory enum, now uses ObjectId reference for dynamic categories
-   */
   @Prop({
     type: Types.ObjectId,
     ref: 'Category',

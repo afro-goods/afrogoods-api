@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { OrderItem, OrderItemSchema } from './orders-item.schema';
+import { Fulfillment, FulfillmentSchema } from './fulfillment.schema';
 import { OrderStatus } from '../enums/order-status.enum';
 import type {
   Note,
@@ -54,21 +55,8 @@ export class Order {
   @Prop()
   cancellationReason?: string;
 
-  @Prop({ type: String })
-  idempotencyKey?: string;
-
-  @Prop({ type: Date })
-  idempotencyKeyCreatedAt?: Date;
+  @Prop({ type: [FulfillmentSchema], default: [] })
+  fulfillments: Fulfillment[];
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);
-
-// Sparse unique index for idempotency key - only indexes documents where the field exists
-OrderSchema.index(
-  { idempotencyKey: 1 },
-  {
-    unique: true,
-    sparse: true,
-    partialFilterExpression: { idempotencyKey: { $exists: true, $ne: null } },
-  },
-);

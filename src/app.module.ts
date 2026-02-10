@@ -59,4 +59,4 @@ const FeatureModules = [
     },
   ],
 })
-export class AppModule { }
+export class AppModule {}

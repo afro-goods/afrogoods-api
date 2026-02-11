@@ -73,6 +73,9 @@ export class GuestOrder {
   @Prop({ default: false })
   isPaid: boolean;
 
+  @Prop()
+  paidAt?: Date;
+
   @Prop({ type: Types.ObjectId, ref: 'User' })
   userId?: Types.ObjectId;
 

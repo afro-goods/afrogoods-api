@@ -29,6 +29,24 @@ export class AdvertsService {
   /** Maximum number of active (pending/approved) adverts per user */
   private readonly MAX_ACTIVE_ADVERTS = 2;
 
+  /** Minimum advert duration in days */
+  private readonly MIN_ADVERT_DURATION_DAYS = 1;
+
+  /** Maximum advert duration in days */
+  private readonly MAX_ADVERT_DURATION_DAYS = 30;
+
+  /** Statuses that allow user updates */
+  private readonly UPDATABLE_STATUSES = [
+    AdvertStatus.PENDING,
+    AdvertStatus.REJECTED,
+  ];
+
+  /** Statuses that allow user deletion */
+  private readonly DELETABLE_STATUSES = [
+    AdvertStatus.PENDING,
+    AdvertStatus.REJECTED,
+  ];
+
   constructor(
     @InjectModel(Advert.name) private advertModel: Model<AdvertDocument>,
     private readonly paginationService: PaginationService,
@@ -53,6 +71,77 @@ export class AdvertsService {
     }
   }
 
+  /**
+   * Validates the duration between startDate and endDate
+   * @param startDate - The advert start date
+   * @param endDate - The advert end date
+   * @returns Validation result with error message if invalid
+   */
+  private validateDateDuration(
+    startDate: Date,
+    endDate: Date,
+  ): { isValid: boolean; error?: string } {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    // Calculate duration in days
+    const durationMs = end.getTime() - start.getTime();
+    const durationDays = durationMs / (1000 * 60 * 60 * 24);
+
+    if (durationDays < this.MIN_ADVERT_DURATION_DAYS) {
+      return {
+        isValid: false,
+        error: `Advert duration must be at least ${this.MIN_ADVERT_DURATION_DAYS} day.`,
+      };
+    }
+
+    if (durationDays > this.MAX_ADVERT_DURATION_DAYS) {
+      return {
+        isValid: false,
+        error: `Advert duration cannot exceed ${this.MAX_ADVERT_DURATION_DAYS} days.`,
+      };
+    }
+
+    return { isValid: true };
+  }
+
+  /**
+   * Validates that the start date is today or in the future
+   * @param startDate - The advert start date
+   * @returns True if startDate is today or future, false if in the past
+   */
+  private isStartDateValid(startDate: Date): boolean {
+    const start = new Date(startDate);
+    const today = new Date();
+
+    // Set today to midnight for comparison
+    today.setHours(0, 0, 0, 0);
+
+    // Set start date to midnight for comparison
+    start.setHours(0, 0, 0, 0);
+
+    return start >= today;
+  }
+
+  /**
+   * Checks if an advert is currently active (current date is between startDate and endDate)
+   * @param advert - The advert document to check
+   * @returns True if the advert is currently active, false otherwise
+   */
+  private isAdvertCurrentlyActive(advert: AdvertDocument): boolean {
+    const now = new Date();
+    const start = new Date(advert.startDate);
+    const end = new Date(advert.endDate);
+
+    // Set all dates to midnight for consistent comparison
+    now.setHours(0, 0, 0, 0);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+
+    // Check if current date is between startDate and endDate (inclusive)
+    return now >= start && now <= end;
+  }
+
   /** Create advert (customer) */
   async create(
     createAdvertDto: CreateAdvertDto,
@@ -74,6 +163,22 @@ export class AdvertsService {
 
     if (new Date(startDate) >= new Date(endDate)) {
       throw new BadRequestException('startDate must be before endDate');
+    }
+
+    // Validate date duration (1-90 days)
+    const durationValidation = this.validateDateDuration(
+      new Date(startDate),
+      new Date(endDate),
+    );
+    if (!durationValidation.isValid) {
+      throw new BadRequestException(durationValidation.error);
+    }
+
+    // Validate start date is not in the past
+    if (!this.isStartDateValid(new Date(startDate))) {
+      throw new BadRequestException(
+        'Start date must be today or a future date.',
+      );
     }
 
     // Validate that the category exists and is of type 'advert'
@@ -103,9 +208,19 @@ export class AdvertsService {
     const advert = await this.advertModel.findById(advertId);
     if (!advert) throw new NotFoundException('Advert not found');
 
+    // Enforce rejection reason when rejecting
+    if (dto.status === AdvertStatus.REJECTED && !dto.rejectionReason) {
+      throw new BadRequestException(
+        'Rejection reason is required when rejecting an advert',
+      );
+    }
+
     advert.status = dto.status;
     if (dto.status === AdvertStatus.REJECTED) {
       advert.rejectionReason = dto.rejectionReason;
+    } else if (dto.status === AdvertStatus.APPROVED) {
+      // Clear rejection reason when approving
+      advert.rejectionReason = undefined;
     }
     advert.reviewedBy = new Types.ObjectId(adminId);
 
@@ -123,8 +238,12 @@ export class AdvertsService {
 
     if (query.type) filter.type = query.type;
     if (query.category) filter.category = new Types.ObjectId(query.category);
-    if (query.status) filter.status = query.status;
     if (query.owner) filter.owner = new Types.ObjectId(query.owner);
+    if (query.isAdminQuery) {
+      if (query.status) filter.status = query.status;
+    } else {
+      filter.status = AdvertStatus.APPROVED;
+    }
 
     return this.paginationService.paginate(this.advertModel, {
       page: query.page,
@@ -147,7 +266,13 @@ export class AdvertsService {
     // Try cache first
     const cacheKey = CacheKeyBuilder.advertSingle(id);
     const cached = await this.cacheService.get<Advert>(cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      // Check status for public access even from cache
+      if (cached.status !== AdvertStatus.APPROVED) {
+        throw new NotFoundException('Advert not found');
+      }
+      return cached;
+    }
 
     const advert = await this.advertModel
       .findById(id)
@@ -158,6 +283,10 @@ export class AdvertsService {
       .exec();
 
     if (!advert) throw new NotFoundException('Advert not found');
+
+    if (advert.status !== AdvertStatus.APPROVED) {
+      throw new NotFoundException('Advert not found');
+    }
 
     // Cache the result
     await this.cacheService.set(cacheKey, advert, CacheTTL.ADVERT_SINGLE);
@@ -178,6 +307,53 @@ export class AdvertsService {
     if (!advert)
       throw new NotFoundException('Advert not found or not owned by you');
 
+    // Check if advert status allows updates
+    if (!this.UPDATABLE_STATUSES.includes(advert.status)) {
+      if (advert.status === AdvertStatus.APPROVED) {
+        throw new BadRequestException(
+          'Cannot update an approved advert. Please contact support if changes are needed.',
+        );
+      }
+      if (advert.status === AdvertStatus.EXPIRED) {
+        throw new BadRequestException('Cannot update an expired advert.');
+      }
+      // Fallback for any other non-updatable status
+      throw new BadRequestException(
+        `Cannot update an advert with status ${advert.status}.`,
+      );
+    }
+
+    // Handle rejected advert resubmission
+    if (advert.status === AdvertStatus.REJECTED) {
+      advert.status = AdvertStatus.PENDING;
+      advert.rejectionReason = undefined;
+      advert.reviewedBy = undefined;
+    }
+
+    // Validate dates if being updated
+    const newStartDate = dto.startDate
+      ? new Date(dto.startDate)
+      : advert.startDate;
+    const newEndDate = dto.endDate ? new Date(dto.endDate) : advert.endDate;
+
+    // Validate start date is not in the past if being updated
+    if (dto.startDate && !this.isStartDateValid(newStartDate)) {
+      throw new BadRequestException(
+        'Start date must be today or a future date.',
+      );
+    }
+
+    // Validate duration if either date is being updated
+    if (dto.startDate || dto.endDate) {
+      const durationValidation = this.validateDateDuration(
+        newStartDate,
+        newEndDate,
+      );
+      if (!durationValidation.isValid) {
+        throw new BadRequestException(durationValidation.error);
+      }
+    }
+
     if (dto.category) {
       await this.validateAdvertCategory(dto.category);
       (dto as any).category = new Types.ObjectId(dto.category);
@@ -195,9 +371,33 @@ export class AdvertsService {
 
   /** Delete advert (customer deletes their own advert) */
   async remove(id: string, ownerId: string): Promise<{ deleted: boolean }> {
-    const res = await this.advertModel
-      .deleteOne({ _id: id, owner: new Types.ObjectId(ownerId) })
-      .exec();
+    // Fetch the advert first to check status and active state
+    const advert = await this.advertModel.findOne({
+      _id: id,
+      owner: new Types.ObjectId(ownerId),
+    });
+
+    if (!advert) {
+      throw new NotFoundException('Advert not found or not owned by you');
+    }
+
+    // Check if advert is APPROVED and currently active
+    if (
+      advert.status === AdvertStatus.APPROVED &&
+      this.isAdvertCurrentlyActive(advert)
+    ) {
+      throw new BadRequestException(
+        'Cannot delete an active approved advert. Please wait until the campaign ends.',
+      );
+    }
+
+    // Allow deletion for:
+    // - PENDING adverts
+    // - REJECTED adverts
+    // - APPROVED adverts that haven't started yet (startDate in future)
+    // - APPROVED adverts that have ended (endDate in past)
+    // - EXPIRED adverts
+    const res = await this.advertModel.deleteOne({ _id: id }).exec();
 
     if (res.deletedCount > 0) {
       // Invalidate specific advert and list caches

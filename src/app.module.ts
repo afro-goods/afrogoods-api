@@ -19,6 +19,7 @@ import { AttributesModule } from './attributes/attributes.module';
 import { CategoriesModule } from './categories/categories.module';
 import { OrdersModule } from './orders/orders.module';
 import { AdvertsModule } from './adverts/adverts.module';
+import { PaymentSettingsModule } from './payment-settings/payment-settings.module';
 // import { PaymentModule } from './payments/payment.module';
 import { CartModule } from './cart/cart.module';
 

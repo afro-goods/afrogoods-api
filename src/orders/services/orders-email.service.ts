@@ -102,4 +102,25 @@ export class OrdersEmailService {
 
     await this.emailQueueService.sendCancellationConfirmationEmail(dto);
   }
+
+  /**
+   * Send admin order notification
+   */
+  async sendAdminOrderNotification(
+    adminEmail: string,
+    orderId: string,
+    totalAmount: number,
+    customerName: string,
+    customerEmail: string,
+  ): Promise<void> {
+    this.logger.log(`Queuing admin order notification for order: ${orderId}`);
+
+    await this.emailQueueService.sendAdminOrderNotification(
+      adminEmail,
+      orderId,
+      totalAmount,
+      customerName,
+      customerEmail,
+    );
+  }
 }

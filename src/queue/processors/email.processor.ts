@@ -23,7 +23,10 @@ export class EmailProcessor extends WorkerHost {
     try {
       const { to, subject, template, data } = job.data;
 
-      const html = this.templateService.render(template as keyof typeof this.templateService['templates'], data);
+      const html = this.templateService.render(
+        template as keyof (typeof this.templateService)['templates'],
+        data,
+      );
 
       await this.resendProvider.send({
         to,

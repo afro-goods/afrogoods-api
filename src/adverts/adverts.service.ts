@@ -233,15 +233,18 @@ export class AdvertsService {
   }
 
   /** Hub / admin listing with pagination & filters */
-  async findAll(query: AdvertQueryDto) {
+  async findAll(query: AdvertQueryDto, isAdminQuery = false) {
     const filter: any = {};
 
     if (query.type) filter.type = query.type;
     if (query.category) filter.category = new Types.ObjectId(query.category);
     if (query.owner) filter.owner = new Types.ObjectId(query.owner);
-    if (query.isAdminQuery) {
+
+    // For public queries (non-admin), only return APPROVED adverts
+    if (isAdminQuery) {
       if (query.status) filter.status = query.status;
     } else {
+      // Public users only see APPROVED adverts
       filter.status = AdvertStatus.APPROVED;
     }
 

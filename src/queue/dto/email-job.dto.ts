@@ -86,3 +86,43 @@ export class EmailPriorityDto {
   @IsOptional()
   priority?: number;
 }
+
+export class SendAdvertSubmittedEmailDto {
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @IsString()
+  @IsNotEmpty()
+  customerName: string;
+
+  @IsString()
+  @IsNotEmpty()
+  advertTitle: string;
+
+  @IsString()
+  @IsNotEmpty()
+  advertType: string;
+}
+
+export class SendAdvertReviewedEmailDto {
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @IsString()
+  @IsNotEmpty()
+  customerName: string;
+
+  @IsString()
+  @IsNotEmpty()
+  advertTitle: string;
+
+  @IsString()
+  @IsNotEmpty()
+  status: string; // 'approved' | 'rejected'
+
+  @IsString()
+  @IsOptional()
+  rejectionReason?: string;
+}

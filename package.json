@@ -18,7 +18,10 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "migrate:attributes": "tsx src/scripts/migrate-product-attributes.ts"
+    "migrate:attributes": "tsx src/scripts/migrate-product-attributes.ts",
+    "test:advert-email": "node scripts/test-advert-email.js",
+    "test:advert-reviewed-email": "node scripts/test-advert-reviewed-email.js",
+    "promote-admin": "node scripts/promote-user-to-admin.js"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.4",

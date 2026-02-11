@@ -22,12 +22,13 @@ export class EmailProcessor extends WorkerHost {
 
     try {
       const { to, subject, template, data } = job.data;
+      const finalSubject = subject || `AfroGoods – ${template || 'Notification'}`;
 
-      const html = this.templateService.render(template as keyof typeof this.templateService['templates'], data);
+      const html = this.templateService.render(template || '', data || {});
 
       await this.resendProvider.send({
         to,
-        subject,
+        subject: finalSubject,
         html,
       });
 

@@ -21,6 +21,8 @@ import {
 } from 'src/shared/services/cache';
 import { CategoryType } from '../categories/enums/category-type.enum';
 import { AdvertStatus } from './enums/advert-status.enum';
+import { EmailQueueService } from '../queue/services/email-queue.service';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class AdvertsService {
@@ -34,6 +36,8 @@ export class AdvertsService {
     private readonly paginationService: PaginationService,
     private readonly categoriesService: CategoriesService,
     private readonly cacheService: CacheService,
+    private readonly emailQueueService: EmailQueueService,
+    private readonly usersService: UsersService,
   ) {}
 
   /**
@@ -91,6 +95,23 @@ export class AdvertsService {
     // Invalidate advert list caches
     await this.cacheService.deleteByPattern(CacheKeyBuilder.advertPattern());
 
+    // Send confirmation email to owner (non-blocking)
+    try {
+      const owner = await this.usersService.findById(ownerId);
+      const advertTypeLabel =
+        savedAdvert.type.charAt(0).toUpperCase() + savedAdvert.type.slice(1);
+      await this.emailQueueService.sendAdvertSubmittedEmail({
+        email: owner.email,
+        customerName: owner.firstName || owner.username || 'there',
+        advertTitle: savedAdvert.title,
+        advertType: advertTypeLabel,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to queue advert submitted email: ${(err as Error).message}`,
+      );
+    }
+
     return savedAdvert;
   }
 
@@ -113,6 +134,24 @@ export class AdvertsService {
 
     // Invalidate all advert caches (status change affects active adverts)
     await this.cacheService.deleteByPattern(CacheKeyBuilder.advertPattern());
+
+    // Send review outcome email to owner (approved or rejected)
+    try {
+      const owner = await this.usersService.findById(
+        savedAdvert.owner.toString(),
+      );
+      await this.emailQueueService.sendAdvertReviewedEmail({
+        email: owner.email,
+        customerName: owner.firstName || owner.username || 'there',
+        advertTitle: savedAdvert.title,
+        status: dto.status,
+        rejectionReason: dto.rejectionReason,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to queue advert reviewed email: ${(err as Error).message}`,
+      );
+    }
 
     return savedAdvert;
   }

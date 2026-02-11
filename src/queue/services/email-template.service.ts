@@ -15,16 +15,30 @@ export class EmailTemplateService {
         this.registerHelpers();
     }
 
-    private loadTemplates(): void {
-        const templatesDir = path.join(__dirname, '../templates');
+    private getTemplatesDir(): string | null {
+        const candidates = [
+            path.join(__dirname, '../templates'),
+            path.join(process.cwd(), 'dist/queue/templates'),
+            path.join(process.cwd(), 'src/queue/templates'),
+        ];
+        for (const dir of candidates) {
+            if (fs.existsSync(dir)) {
+                return dir;
+            }
+        }
+        return null;
+    }
 
-        // Check if templates directory exists
-        if (!fs.existsSync(templatesDir)) {
+    private loadTemplates(): void {
+        const templatesDir = this.getTemplatesDir();
+
+        if (!templatesDir) {
             this.logger.warn(
-                `Templates directory not found: ${templatesDir}. Email templates will not be available.`,
+                'Templates directory not found (tried __dirname/../templates, cwd/dist/queue/templates, cwd/src/queue/templates). Email templates will use fallback.',
             );
             return;
         }
+        this.logger.log(`Loading email templates from: ${templatesDir}`);
 
         const templateFiles = [
             'welcomeemail.html',
@@ -32,6 +46,8 @@ export class EmailTemplateService {
             'ordercancellation.html',
             'orderstatusupdate.html',
             'passwordreset.html',
+            'advertsubmitted.html',
+            'advertreviewed.html',
         ];
 
         // Load base layout first
@@ -140,8 +156,9 @@ export class EmailTemplateService {
         const template = this.templates[templateName];
 
         if (!template) {
-            // Return a simple fallback HTML if template not found
-            this.logger.warn(`Template '${templateName}' not found, using fallback`);
+            this.logger.warn(
+                `Template '${templateName}' not found. Available: ${Object.keys(this.templates).join(', ') || 'none'}. Using fallback.`,
+            );
             return this.renderFallback(templateName, data);
         }
 
@@ -166,7 +183,8 @@ export class EmailTemplateService {
             return this.baseLayout(layoutData);
         } catch (error) {
             this.logger.error(
-                `Failed to render template '${templateName}': ${error.message}`,
+                `Failed to render template '${templateName}': ${(error as Error).message}`,
+                (error as Error).stack,
             );
             return this.renderFallback(templateName, data);
         }

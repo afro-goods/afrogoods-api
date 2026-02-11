@@ -7,6 +7,8 @@ import {
   SendPasswordResetEmailDto,
   SendVerificationEmailDto,
   SendOrderConfirmationEmailDto,
+  SendAdvertSubmittedEmailDto,
+  SendAdvertReviewedEmailDto,
 } from '../dto/email-job.dto';
 import {
   SendOrderStatusUpdateEmailDto,
@@ -179,5 +181,53 @@ export class EmailQueueService {
     };
 
     return this.sendEmail(emailJob, 2); // High priority for cancellation confirmations
+  }
+
+  /**
+   * Send email when a user submits an advert (confirmation)
+   */
+  async sendAdvertSubmittedEmail(dto: SendAdvertSubmittedEmailDto) {
+    const emailJob: EmailJobDto = {
+      to: dto.email,
+      subject: `Your advert has been submitted – ${dto.advertTitle}`,
+      template: 'advertsubmitted',
+      data: {
+        customerName: dto.customerName,
+        customerEmail: dto.email,
+        advertTitle: dto.advertTitle,
+        advertType: dto.advertType,
+        submittedAt: new Date(),
+        appName: 'AfroGoods',
+        appUrl: process.env.APP_URL || 'https://afrogoods.com',
+      },
+    };
+
+    return this.sendEmail(emailJob, 4);
+  }
+
+  /**
+   * Send email when an advert has been reviewed (approved or rejected)
+   */
+  async sendAdvertReviewedEmail(dto: SendAdvertReviewedEmailDto) {
+    const emailJob: EmailJobDto = {
+      to: dto.email,
+      subject:
+        dto.status === 'approved'
+          ? `Your advert has been approved – ${dto.advertTitle}`
+          : `Advert review update – ${dto.advertTitle}`,
+      template: 'advertreviewed',
+      data: {
+        customerName: dto.customerName,
+        customerEmail: dto.email,
+        advertTitle: dto.advertTitle,
+        status: dto.status,
+        rejectionReason: dto.rejectionReason,
+        reviewedAt: new Date(),
+        appName: 'AfroGoods',
+        appUrl: process.env.APP_URL || 'https://afrogoods.com',
+      },
+    };
+
+    return this.sendEmail(emailJob, 3);
   }
 }

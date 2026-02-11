@@ -200,6 +200,17 @@ export class OrdersController {
     return orderDetails;
   }
 
+  /** POST /orders/:orderId/confirm - Confirm order (Admin only) */
+  @Post(':orderId/confirm')
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  confirmOrder(
+    @Param('orderId') orderId: string,
+    @CurrentUser('_id') adminId: string,
+  ) {
+    return this.ordersService.confirmOrder(orderId, adminId);
+  }
+
   /** PATCH /orders/admin/order/:id/status - Update order status (sends email to customer, handles both regular and guest orders) */
   @Patch('admin/order/:id/status')
   @UseGuards(FirebaseAuthGuard, RolesGuard)

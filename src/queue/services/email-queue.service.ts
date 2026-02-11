@@ -180,4 +180,31 @@ export class EmailQueueService {
 
     return this.sendEmail(emailJob, 2); // High priority for cancellation confirmations
   }
+
+  /**
+   * Send admin order notification
+   */
+  async sendAdminOrderNotification(
+    adminEmail: string,
+    orderId: string,
+    totalAmount: number,
+    customerName: string,
+    customerEmail: string,
+  ) {
+    const emailJob: EmailJobDto = {
+      to: adminEmail,
+      subject: `New Order Received - ${orderId}`,
+      template: 'adminordernotification',
+      data: {
+        orderId,
+        totalAmount,
+        customerName,
+        customerEmail,
+        adminDashboardUrl:
+          process.env.ADMIN_DASHBOARD_URL || 'http://localhost:5173',
+      },
+    };
+
+    return this.sendEmail(emailJob);
+  }
 }

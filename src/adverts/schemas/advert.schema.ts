@@ -19,6 +19,7 @@ export class Advert extends Document {
   owner: Types.ObjectId;
 
   @Prop({
+    type: String,
     required: true,
     enum: AdvertType,
     index: true,
@@ -34,6 +35,7 @@ export class Advert extends Document {
   category: Types.ObjectId;
 
   @Prop({
+    type: String,
     required: true,
     enum: AdvertTargetType,
   })
@@ -43,6 +45,7 @@ export class Advert extends Document {
   targetValue: string;
 
   @Prop({
+    type: String,
     enum: AdvertStatus,
     default: AdvertStatus.PENDING,
     index: true,

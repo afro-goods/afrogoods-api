@@ -14,7 +14,8 @@ export const CARRIER_TRACKING_URLS: Record<ShippingCarrier, string | null> = {
   [ShippingCarrier.CANADA_POST]:
     'https://www.canadapost-postescanada.ca/track-reperage/en#/search?searchFor={trackingNumber}',
   [ShippingCarrier.UPS]: 'https://www.ups.com/track?tracknum={trackingNumber}',
-  [ShippingCarrier.FEDEX]: 'https://www.fedex.com/fedextrack/?trknbr={trackingNumber}',
+  [ShippingCarrier.FEDEX]:
+    'https://www.fedex.com/fedextrack/?trknbr={trackingNumber}',
   [ShippingCarrier.DHL]:
     'https://www.dhl.com/en/express/tracking.html?AWB={trackingNumber}',
   [ShippingCarrier.PUROLATOR]:
@@ -31,5 +32,8 @@ export function generateTrackingUrl(
 ): string | null {
   const pattern = CARRIER_TRACKING_URLS[carrier];
   if (!pattern) return null;
-  return pattern.replace('{trackingNumber}', encodeURIComponent(trackingNumber));
+  return pattern.replace(
+    '{trackingNumber}',
+    encodeURIComponent(trackingNumber),
+  );
 }

@@ -11,6 +11,8 @@ import { OrdersEmailService } from './services/orders-email.service';
 import { FulfillmentGroupingService } from './services/fulfillment-grouping.service';
 import { PaginationService } from '../shared/services/pagination/services/pagination.service';
 
+import { PaymentSettingsModule } from '../payment-settings/payment-settings.module';
+
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -20,6 +22,7 @@ import { PaginationService } from '../shared/services/pagination/services/pagina
       { name: Product.name, schema: ProductSchema },
     ]),
     AuthModule,
+    PaymentSettingsModule,
   ],
   controllers: [OrdersController],
   providers: [

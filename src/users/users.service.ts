@@ -4,6 +4,7 @@ import { Model, Connection } from 'mongoose';
 import { User } from './schemas/user.schema';
 import { UserRole } from './interfaces/user.interface';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { PaginationOptions } from 'src/shared/services/pagination/interfaces/pagination.interface';
 import { PaginationService } from 'src/shared/services/pagination/services/pagination.service';
 import { inTransaction } from 'src/utilities/transaction';
@@ -51,7 +52,11 @@ export class UsersService {
     return user;
   }
 
-  async findAll(pagination: PaginationOptions<User>, role?: UserRole, search?: string) {
+  async findAll(
+    pagination: PaginationOptions<User>,
+    role?: UserRole,
+    search?: string,
+  ) {
     const filter: Record<string, any> = {};
 
     if (role) {
@@ -84,6 +89,33 @@ export class UsersService {
   async verifyEmail(firebaseUid: string): Promise<User> {
     const user = await this.userModel
       .findOneAndUpdate({ firebaseUid }, { emailVerified: true }, { new: true })
+      .exec();
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
+  }
+
+  async updateUser(id: string, updateDto: UpdateUserDto): Promise<User> {
+    const user = await this.userModel
+      .findByIdAndUpdate(id, { $set: updateDto }, { new: true })
+      .exec();
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
+  }
+
+  async updateUserByFirebaseUid(
+    firebaseUid: string,
+    updateDto: UpdateUserDto,
+  ): Promise<User> {
+    const user = await this.userModel
+      .findOneAndUpdate({ firebaseUid }, { $set: updateDto }, { new: true })
       .exec();
 
     if (!user) {

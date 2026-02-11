@@ -68,6 +68,14 @@ export class AdvertsController {
 
   /** ---------------- Admin Endpoints ---------------- */
 
+  @Get('admin')
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async adminFindAll(@Query() query: AdvertQueryDto) {
+    query.isAdminQuery = true;
+    return this.advertsService.findAll(query);
+  }
+
   @Patch(':id/review')
   @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)

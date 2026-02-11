@@ -23,4 +23,10 @@ export class AdvertQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   owner?: string;
+
+  /**
+   * Internal flag set by controller to indicate admin query
+   * Not exposed to external requests
+   */
+  isAdminQuery?: boolean;
 }

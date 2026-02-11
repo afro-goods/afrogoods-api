@@ -27,6 +27,7 @@ import { UpdateShippingAddressDto } from './dto/update-shipping-address.dto';
 import { PaginationService } from '../shared/services/pagination/services/pagination.service';
 import type { PaginationResult } from '../shared/services/pagination/interfaces/pagination.interface';
 import { UsersService } from '../users/users.service';
+import { PaymentSettingsService } from '../payment-settings/payment-settings.service';
 import { DeliveryTimeUnit } from '../product/enums/delivery-time-unit.enum';
 import { FulfillmentStatus } from './enums/fulfillment-status.enum';
 import { FulfillmentType } from './enums/fulfillment-type.enum';
@@ -52,6 +53,7 @@ export class OrdersService {
     private readonly fulfillmentGroupingService: FulfillmentGroupingService,
     private readonly paginationService: PaginationService,
     private readonly usersService: UsersService,
+    private readonly paymentSettingsService: PaymentSettingsService,
   ) {}
 
   // ============================================================
@@ -310,6 +312,16 @@ export class OrdersService {
           customerName: `${user.firstName} ${user.lastName}`,
         },
       );
+
+      // Send admin notification
+      const settings = await this.paymentSettingsService.getSettings();
+      await this.ordersEmailService.sendAdminOrderNotification(
+        settings.eTransferEmail,
+        order.orderId,
+        order.totalAmount,
+        `${user.firstName} ${user.lastName}`,
+        user.email,
+      );
     } catch {
       // Don't fail order creation if email fails
     }
@@ -559,6 +571,16 @@ export class OrdersService {
           itemCount: guestOrder.items.length,
           customerName: `${firstName} ${lastName}`,
         },
+      );
+
+      // Send admin notification
+      const settings = await this.paymentSettingsService.getSettings();
+      await this.ordersEmailService.sendAdminOrderNotification(
+        settings.eTransferEmail,
+        guestOrder.orderId,
+        guestOrder.totalAmount,
+        `${firstName} ${lastName}`,
+        email,
       );
     } catch {
       // Don't fail order creation if email fails
@@ -974,6 +996,89 @@ export class OrdersService {
         totalPages: Math.ceil((regularCount + guestCount) / limit),
       },
     };
+  }
+
+  /** Confirm order (Admin only) */
+  async confirmOrder(
+    orderId: string,
+    adminId: string,
+  ): Promise<Order | GuestOrder> {
+    let order: OrderDocument | GuestOrderDocument | null =
+      await this.orderModel.findOne({ orderId });
+    let isGuest = false;
+
+    if (!order) {
+      order = await this.guestOrderModel.findOne({ orderId });
+      isGuest = true;
+    }
+
+    if (!order) {
+      throw new NotFoundException(`Order with ID ${orderId} not found`);
+    }
+
+    if (order.status !== OrderStatus.PENDING) {
+      throw new BadRequestException(`Order can only be confirmed when PENDING`);
+    }
+
+    const previousStatus = order.status;
+
+    // Update order status and payment info
+    order.status = OrderStatus.CONFIRMED;
+    order.isPaid = true;
+    order.paidAt = new Date();
+
+    // Update all fulfillments to processing
+    if (order.fulfillments && order.fulfillments.length > 0) {
+      for (const fulfillment of order.fulfillments) {
+        if (fulfillment.status === FulfillmentStatus.PENDING) {
+          fulfillment.status = FulfillmentStatus.PROCESSING;
+        }
+      }
+    }
+
+    // Add status history
+    order.statusHistory.push({
+      status: OrderStatus.CONFIRMED,
+      previousStatus,
+      createdAt: new Date(),
+      updatedBy: adminId,
+      reason: 'Payment confirmed by admin',
+    });
+
+    await order.save();
+
+    // Send confirmation email
+    try {
+      if (!isGuest) {
+        const user = await this.usersService.findById(
+          (order as OrderDocument).userId.toString(),
+        );
+        await this.ordersEmailService.sendOrderConfirmationEmail(
+          user.email,
+          order.orderId,
+          {
+            totalAmount: order.totalAmount,
+            itemCount: order.items.length,
+            customerName: `${user.firstName} ${user.lastName}`,
+          },
+        );
+      } else {
+        const guestOrder = order as GuestOrderDocument;
+        await this.ordersEmailService.sendOrderConfirmationEmail(
+          guestOrder.customerInfo.email,
+          guestOrder.orderId,
+          {
+            totalAmount: guestOrder.totalAmount,
+            itemCount: guestOrder.items.length,
+            customerName: `${guestOrder.customerInfo.firstName} ${guestOrder.customerInfo.lastName}`,
+          },
+        );
+      }
+    } catch {
+      // Ignore email error
+    }
+
+    return order;
   }
 
   /** Get order details for admin */

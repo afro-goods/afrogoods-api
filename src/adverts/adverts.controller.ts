@@ -29,19 +29,16 @@ export class AdvertsController {
 
   @Get()
   async findAll(@Query() query: AdvertQueryDto) {
-    return this.advertsService.findAll(query);
+    return this.advertsService.findAll(query, false);
   }
 
   /** ---------------- Customer Endpoints (Auth Required) ---------------- */
 
   @Get('me')
   @UseGuards(FirebaseAuthGuard)
-  async myAdverts(@CurrentUser() user: User) {
-    const query = new AdvertQueryDto();
-    query.page = 1;
-    query.limit = 50;
+  async myAdverts(@Query() query: AdvertQueryDto, @CurrentUser() user: User) {
     query.owner = user._id.toString();
-    return this.advertsService.findAll(query);
+    return this.advertsService.findAll(query, true);
   }
 
   @Post()
@@ -72,8 +69,7 @@ export class AdvertsController {
   @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   async adminFindAll(@Query() query: AdvertQueryDto) {
-    query.isAdminQuery = true;
-    return this.advertsService.findAll(query);
+    return this.advertsService.findAll(query, true);
   }
 
   @Patch(':id/review')

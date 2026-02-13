@@ -13,7 +13,6 @@ import { FirebaseModule } from 'src/firebase/firebase.module';
 import { UsersModule } from 'src/users/users.module';
 import { AuthModule } from 'src/auth/auth.module';
 import { SharedModule } from 'src/shared/shared.module';
-import { QueueModule } from './queue/queue.module';
 import { ProductsModule } from 'src/product/product.module';
 import { AttributesModule } from './attributes/attributes.module';
 import { CategoriesModule } from './categories/categories.module';
@@ -41,7 +40,6 @@ const FeatureModules = [
   UsersModule,
   AuthModule,
   SharedModule,
-  QueueModule,
   AttributesModule,
   CategoriesModule,
   ProductsModule,

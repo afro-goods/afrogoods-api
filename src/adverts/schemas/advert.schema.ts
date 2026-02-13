@@ -6,10 +6,10 @@ import { AdvertTargetType } from '../enums/advert-target-type.enum';
 
 @Schema({ timestamps: true })
 export class Advert extends Document {
-  @Prop({ required: true, trim: true })
+  @Prop({ type: String, required: true, trim: true })
   title: string;
 
-  @Prop({ trim: true })
+  @Prop({ type: String, trim: true })
   description?: string;
 
   @Prop({ type: [String], required: true })
@@ -41,7 +41,7 @@ export class Advert extends Document {
   })
   targetType: AdvertTargetType;
 
-  @Prop({ required: true })
+  @Prop({ type: String, required: true })
   targetValue: string;
 
   @Prop({
@@ -52,7 +52,7 @@ export class Advert extends Document {
   })
   status: AdvertStatus;
 
-  @Prop({ default: true })
+  @Prop({ type: Boolean, default: true })
   isActive: boolean;
 
   @Prop({ type: Date, required: true, index: true })
@@ -64,13 +64,13 @@ export class Advert extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User' })
   reviewedBy?: Types.ObjectId;
 
-  @Prop({ trim: true })
+  @Prop({ type: String, trim: true })
   rejectionReason?: string;
 
-  @Prop({ default: false, index: true })
+  @Prop({ type: Boolean, default: false, index: true })
   isFeatured: boolean;
 
-  @Prop({ default: 0 })
+  @Prop({ type: Number, default: 0 })
   clickCount: number;
 }
 

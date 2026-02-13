@@ -14,13 +14,9 @@ import { ReviewAdvertDto } from './dto/review-advert.dto';
 import { AdvertQueryDto } from './dto/advert-query.dto';
 import { PaginationService } from 'src/shared/services/pagination/services/pagination.service';
 import { CategoriesService } from '../categories/categories.service';
-import {
-  CacheService,
-  CacheKeyBuilder,
-  CacheTTL,
-} from 'src/shared/services/cache';
 import { CategoryType } from '../categories/enums/category-type.enum';
 import { AdvertStatus } from './enums/advert-status.enum';
+import { EmailService } from '../shared/services/email/email.service';
 
 @Injectable()
 export class AdvertsService {
@@ -51,7 +47,7 @@ export class AdvertsService {
     @InjectModel(Advert.name) private advertModel: Model<AdvertDocument>,
     private readonly paginationService: PaginationService,
     private readonly categoriesService: CategoriesService,
-    private readonly cacheService: CacheService,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -193,8 +189,29 @@ export class AdvertsService {
 
     const savedAdvert = await advert.save();
 
-    // Invalidate advert list caches
-    await this.cacheService.deleteByPattern(CacheKeyBuilder.advertPattern());
+    await savedAdvert.populate([
+      {
+        path: 'owner',
+        select: 'firstName lastName email phoneNumber photoUrl',
+      },
+      { path: 'category', select: 'name description' },
+    ]);
+
+    // Send submission confirmation email
+    try {
+      const owner = savedAdvert.owner as any;
+      await this.emailService.sendAdvertSubmittedEmail({
+        email: owner.email,
+        customerName: `${owner.firstName} ${owner.lastName}`,
+        advertTitle: savedAdvert.title,
+        advertType: savedAdvert.type,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to send advert submission email: ${error.message}`,
+      );
+      // Don't throw - email failure shouldn't block advert creation
+    }
 
     return savedAdvert;
   }
@@ -226,8 +243,26 @@ export class AdvertsService {
 
     const savedAdvert = await advert.save();
 
-    // Invalidate all advert caches (status change affects active adverts)
-    await this.cacheService.deleteByPattern(CacheKeyBuilder.advertPattern());
+    // Populate owner to get email details
+    await savedAdvert.populate({
+      path: 'owner',
+      select: 'firstName lastName email',
+    });
+
+    // Send review notification email
+    try {
+      const owner = savedAdvert.owner as any;
+      await this.emailService.sendAdvertReviewedEmail({
+        email: owner.email,
+        customerName: `${owner.firstName} ${owner.lastName}`,
+        advertTitle: savedAdvert.title,
+        status: dto.status === AdvertStatus.APPROVED ? 'approved' : 'rejected',
+        rejectionReason: dto.rejectionReason,
+      });
+    } catch (error) {
+      this.logger.error(`Failed to send advert review email: ${error.message}`);
+      // Don't throw - email failure shouldn't block review process
+    }
 
     return savedAdvert;
   }
@@ -266,17 +301,6 @@ export class AdvertsService {
 
   /** Find one advert with full details */
   async findOne(id: string): Promise<Advert> {
-    // Try cache first
-    const cacheKey = CacheKeyBuilder.advertSingle(id);
-    const cached = await this.cacheService.get<Advert>(cacheKey);
-    if (cached) {
-      // Check status for public access even from cache
-      if (cached.status !== AdvertStatus.APPROVED) {
-        throw new NotFoundException('Advert not found');
-      }
-      return cached;
-    }
-
     const advert = await this.advertModel
       .findById(id)
       .populate('owner', 'firstName lastName email phoneNumber photoUrl')
@@ -290,9 +314,6 @@ export class AdvertsService {
     if (advert.status !== AdvertStatus.APPROVED) {
       throw new NotFoundException('Advert not found');
     }
-
-    // Cache the result
-    await this.cacheService.set(cacheKey, advert, CacheTTL.ADVERT_SINGLE);
 
     return advert;
   }
@@ -365,10 +386,6 @@ export class AdvertsService {
     Object.assign(advert, dto);
     const savedAdvert = await advert.save();
 
-    // Invalidate specific advert and list caches
-    await this.cacheService.delete(CacheKeyBuilder.advertSingle(id));
-    await this.cacheService.deleteByPattern(CacheKeyBuilder.advertPattern());
-
     return savedAdvert;
   }
 
@@ -402,12 +419,6 @@ export class AdvertsService {
     // - EXPIRED adverts
     const res = await this.advertModel.deleteOne({ _id: id }).exec();
 
-    if (res.deletedCount > 0) {
-      // Invalidate specific advert and list caches
-      await this.cacheService.delete(CacheKeyBuilder.advertSingle(id));
-      await this.cacheService.deleteByPattern(CacheKeyBuilder.advertPattern());
-    }
-
     return { deleted: res.deletedCount > 0 };
   }
 
@@ -422,12 +433,6 @@ export class AdvertsService {
       { endDate: { $lt: now }, status: AdvertStatus.APPROVED },
       { status: AdvertStatus.EXPIRED, isActive: false },
     );
-
-    if (res.modifiedCount > 0) {
-      this.logger.log(`Expired ${res.modifiedCount} advert(s)`);
-      // Invalidate all advert caches
-      await this.cacheService.deleteByPattern(CacheKeyBuilder.advertPattern());
-    }
 
     return res.modifiedCount;
   }

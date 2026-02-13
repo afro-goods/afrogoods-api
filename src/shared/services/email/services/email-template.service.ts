@@ -16,23 +16,29 @@ export class EmailTemplateService {
   }
 
   private loadTemplates(): void {
-    const templatesDir = path.join(__dirname, '../templates');
+    // Try both development (src) and production (dist) paths
+    const possiblePaths = [
+      path.join(__dirname, '../templates'), // Standard relative path
+      path.join(process.cwd(), 'src/shared/services/email/templates'), // Source path
+      path.join(process.cwd(), 'dist/shared/services/email/templates'), // Build path
+    ];
 
-    // Check if templates directory exists
-    if (!fs.existsSync(templatesDir)) {
+    let templatesDir = '';
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        templatesDir = p;
+        break;
+      }
+    }
+
+    if (!templatesDir) {
       this.logger.warn(
-        `Templates directory not found: ${templatesDir}. Email templates will not be available.`,
+        'Email templates directory not found in any expected location.',
       );
       return;
     }
 
-    const templateFiles = [
-      'welcomeemail.html',
-      'orderconfirmation.html',
-      'ordercancellation.html',
-      'orderstatusupdate.html',
-      'passwordreset.html',
-    ];
+    this.logger.log(`Loading email templates from: ${templatesDir}`);
 
     // Load base layout first
     try {
@@ -48,24 +54,23 @@ export class EmailTemplateService {
       this.logger.warn(`Failed to load base layout: ${error.message}`);
     }
 
-    // Load individual templates
     let loadedCount = 0;
-    templateFiles.forEach((file) => {
-      try {
-        const templatePath = path.join(templatesDir, file);
-        if (fs.existsSync(templatePath)) {
+    // Check individual template files in the directory
+    try {
+      const files = fs.readdirSync(templatesDir);
+      files.forEach((file) => {
+        if (file.endsWith('.html') && file !== 'base-layout.html') {
+          const templatePath = path.join(templatesDir, file);
           const templateContent = fs.readFileSync(templatePath, 'utf-8');
           const templateName = file.replace('.html', '');
           this.templates[templateName] = Handlebars.compile(templateContent);
           this.logger.debug(`Loaded template: ${templateName}`);
           loadedCount++;
-        } else {
-          this.logger.warn(`Template file not found: ${file}`);
         }
-      } catch (error) {
-        this.logger.warn(`Failed to load template ${file}: ${error.message}`);
-      }
-    });
+      });
+    } catch (error) {
+      this.logger.error(`Error reading templates directory: ${error.message}`);
+    }
 
     this.templatesLoaded = loadedCount > 0;
     if (this.templatesLoaded) {

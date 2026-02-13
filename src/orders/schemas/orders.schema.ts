@@ -13,7 +13,7 @@ export type OrderDocument = Order & Document;
 
 @Schema({ timestamps: true })
 export class Order {
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ type: String, required: true, unique: true, index: true })
   orderId: string;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
@@ -22,19 +22,19 @@ export class Order {
   @Prop({ type: [OrderItemSchema], default: [] })
   items: OrderItem[];
 
-  @Prop({ required: true })
+  @Prop({ type: Number, required: true })
   totalAmount: number;
 
   @Prop({ type: String, enum: OrderStatus, default: OrderStatus.PENDING })
   status: OrderStatus;
 
-  @Prop()
+  @Prop({ type: String })
   paymentIntentId?: string;
 
-  @Prop({ default: false })
+  @Prop({ type: Boolean, default: false })
   isPaid: boolean;
 
-  @Prop()
+  @Prop({ type: Date })
   paidAt?: Date;
 
   @Prop({ type: Object })
@@ -49,10 +49,10 @@ export class Order {
   @Prop({ type: [Object], default: [] })
   statusHistory: StatusHistory[];
 
-  @Prop()
+  @Prop({ type: Date })
   cancelledAt?: Date;
 
-  @Prop()
+  @Prop({ type: String })
   cancellationReason?: string;
 
   @Prop({ type: [FulfillmentSchema], default: [] })

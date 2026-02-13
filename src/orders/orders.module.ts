@@ -10,7 +10,7 @@ import { AuthModule } from '../auth/auth.module';
 import { OrdersEmailService } from './services/orders-email.service';
 import { FulfillmentGroupingService } from './services/fulfillment-grouping.service';
 import { PaginationService } from '../shared/services/pagination/services/pagination.service';
-
+import { SharedModule } from '../shared/shared.module';
 import { PaymentSettingsModule } from '../payment-settings/payment-settings.module';
 
 @Module({
@@ -22,6 +22,7 @@ import { PaymentSettingsModule } from '../payment-settings/payment-settings.modu
       { name: Product.name, schema: ProductSchema },
     ]),
     AuthModule,
+    SharedModule,
     PaymentSettingsModule,
   ],
   controllers: [OrdersController],

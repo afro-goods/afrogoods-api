@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { EmailTemplateService } from './email-template.service';
+import { EmailTemplateService } from '../../shared/services/email/services/email-template.service';
 
 describe('EmailTemplateService', () => {
   let service: EmailTemplateService;

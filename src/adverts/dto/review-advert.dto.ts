@@ -6,7 +6,9 @@ export class ReviewAdvertDto {
   status: AdvertStatus.APPROVED | AdvertStatus.REJECTED;
 
   @ValidateIf((o) => o.status === AdvertStatus.REJECTED)
-  @IsNotEmpty({ message: 'Rejection reason is required when rejecting an advert' })
+  @IsNotEmpty({
+    message: 'Rejection reason is required when rejecting an advert',
+  })
   @IsString()
   rejectionReason?: string;
 }

@@ -1,9 +1,11 @@
 import { Module, Logger } from '@nestjs/common';
 import { MediaService } from './services/media/services/media.service';
 import { MediaProvider } from './services/media/constants/media.constant';
-import { RedisProvider } from './services/storage/providers/redis.provider';
 import { PaginationService } from './services/pagination/services/pagination.service';
-import { CacheService } from './services/cache/cache.service';
+// import { CacheService } from './services/cache/cache.service'; // Temporarily commented out - will be removed in Phase 4
+import { ResendProvider } from './services/email/resend.provider';
+import { EmailService } from './services/email/email.service';
+import { EmailTemplateService } from './services/email/services/email-template.service';
 
 @Module({
   providers: [
@@ -11,9 +13,11 @@ import { CacheService } from './services/cache/cache.service';
     MediaService,
     PaginationService,
     Logger,
-    RedisProvider,
-    CacheService,
+    // CacheService, // Temporarily commented out - will be removed in Phase 4
+    ResendProvider,
+    EmailTemplateService,
+    EmailService,
   ],
-  exports: [MediaService, PaginationService, CacheService],
+  exports: [MediaService, PaginationService, /* CacheService, */ EmailService],
 })
 export class SharedModule {}

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
 import { Model, Types, Connection, ClientSession } from 'mongoose';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 import { Order, OrderDocument } from './schemas/orders.schema';
 import { GuestOrder, GuestOrderDocument } from './schemas/guest-order.schema';
@@ -27,6 +28,7 @@ import { UpdateShippingAddressDto } from './dto/update-shipping-address.dto';
 import { PaginationService } from '../shared/services/pagination/services/pagination.service';
 import type { PaginationResult } from '../shared/services/pagination/interfaces/pagination.interface';
 import { UsersService } from '../users/users.service';
+import { PaymentSettingsService } from '../payment-settings/payment-settings.service';
 import { DeliveryTimeUnit } from '../product/enums/delivery-time-unit.enum';
 import { FulfillmentStatus } from './enums/fulfillment-status.enum';
 import { FulfillmentType } from './enums/fulfillment-type.enum';
@@ -34,6 +36,7 @@ import {
   ShippingCarrier,
   generateTrackingUrl as generateCarrierTrackingUrl,
 } from './enums/shipping-carrier.enum';
+import { AvailabilityStatus } from 'src/product/enums/availabilty-status.enum';
 
 @Injectable()
 export class OrdersService {
@@ -52,6 +55,7 @@ export class OrdersService {
     private readonly fulfillmentGroupingService: FulfillmentGroupingService,
     private readonly paginationService: PaginationService,
     private readonly usersService: UsersService,
+    private readonly paymentSettingsService: PaymentSettingsService,
   ) {}
 
   // ============================================================
@@ -211,9 +215,22 @@ export class OrdersService {
     session?: ClientSession,
   ) {
     for (const item of items) {
+      const product = await this.productModel
+        .findById(item.productId)
+        .session(session || null);
+      if (!product) continue;
+
+      const newStock = Math.max(0, product.stock - item.quantity);
+      const updateData: any = { stock: newStock };
+
+      // Automatically change status to Out of Stock if stock reaches 0
+      if (newStock === 0) {
+        updateData.availabilityStatus = 'Out of Stock';
+      }
+
       await this.productModel.updateOne(
         { _id: item.productId },
-        { $inc: { stock: -item.quantity } },
+        { $set: updateData },
         { session },
       );
     }
@@ -224,12 +241,60 @@ export class OrdersService {
     session?: ClientSession,
   ) {
     for (const item of items) {
+      const product = await this.productModel
+        .findById(item.productId)
+        .session(session || null);
+      if (!product) continue;
+
+      const newStock = product.stock + item.quantity;
+      const updateData: any = { stock: newStock };
+
+      // Automatically change status back to In Stock if stock was 0 and is now > 0
+      if (
+        product.stock === 0 &&
+        newStock > 0 &&
+        product.availabilityStatus === AvailabilityStatus.OUT_OF_STOCK
+      ) {
+        updateData.availabilityStatus = AvailabilityStatus.IN_STOCK;
+      }
+
       await this.productModel.updateOne(
         { _id: item.productId },
-        { $inc: { stock: item.quantity } },
+        { $set: updateData },
         { session },
       );
     }
+  }
+
+  private prepareEmailData(order: any, customerInfo: any) {
+    return {
+      total: order.totalAmount,
+      itemCount: order.items.length,
+      customerName: `${customerInfo.firstName} ${customerInfo.lastName}`,
+      orderId: order.orderId,
+      orderDate: order.createdAt || new Date(),
+      currency: 'CA$',
+      items: order.items.map((item: any) => ({
+        name: item.productId?.name || 'Product',
+        quantity: item.quantity,
+        price: item.priceAtPurchase,
+      })),
+      subtotal: order.totalAmount,
+      shippingCost: 0,
+      shippingAddress: {
+        name: `${customerInfo.firstName} ${customerInfo.lastName}`,
+        street:
+          order.shippingAddress?.street ||
+          order.shippingAddress?.streetAddress ||
+          '',
+        city: order.shippingAddress?.city || '',
+        state: order.shippingAddress?.state || '',
+        zipCode: order.shippingAddress?.postalCode || '',
+        country: order.shippingAddress?.country || 'Canada',
+      },
+      paymentMethod: 'E-Transfer',
+      appUrl: process.env.APP_URL || 'https://afrogoods.com',
+    };
   }
 
   // ============================================================
@@ -301,14 +366,22 @@ export class OrdersService {
 
     try {
       const user = await this.usersService.findById(userId);
+      const emailData = this.prepareEmailData(order, user);
+
       await this.ordersEmailService.sendOrderConfirmationEmail(
         user.email,
         order.orderId,
-        {
-          totalAmount: order.totalAmount,
-          itemCount: order.items.length,
-          customerName: `${user.firstName} ${user.lastName}`,
-        },
+        emailData,
+      );
+
+      // Send admin notification
+      const settings = await this.paymentSettingsService.getSettings();
+      await this.ordersEmailService.sendAdminOrderNotification(
+        settings.eTransferEmail,
+        order.orderId,
+        order.totalAmount,
+        `${user.firstName} ${user.lastName}`,
+        user.email,
       );
     } catch {
       // Don't fail order creation if email fails
@@ -551,14 +624,25 @@ export class OrdersService {
 
     try {
       const { email, firstName, lastName } = guestOrder.customerInfo;
+      const emailData = this.prepareEmailData(
+        guestOrder,
+        guestOrder.customerInfo,
+      );
+
       await this.ordersEmailService.sendOrderConfirmationEmail(
         email,
         guestOrder.orderId,
-        {
-          totalAmount: guestOrder.totalAmount,
-          itemCount: guestOrder.items.length,
-          customerName: `${firstName} ${lastName}`,
-        },
+        emailData,
+      );
+
+      // Send admin notification
+      const settings = await this.paymentSettingsService.getSettings();
+      await this.ordersEmailService.sendAdminOrderNotification(
+        settings.eTransferEmail,
+        guestOrder.orderId,
+        guestOrder.totalAmount,
+        `${firstName} ${lastName}`,
+        email,
       );
     } catch {
       // Don't fail order creation if email fails
@@ -974,6 +1058,89 @@ export class OrdersService {
         totalPages: Math.ceil((regularCount + guestCount) / limit),
       },
     };
+  }
+
+  /** Confirm order (Admin only) */
+  async confirmOrder(
+    orderId: string,
+    adminId: string,
+  ): Promise<Order | GuestOrder> {
+    let order: OrderDocument | GuestOrderDocument | null =
+      await this.orderModel.findOne({ orderId });
+    let isGuest = false;
+
+    if (!order) {
+      order = await this.guestOrderModel.findOne({ orderId });
+      isGuest = true;
+    }
+
+    if (!order) {
+      throw new NotFoundException(`Order with ID ${orderId} not found`);
+    }
+
+    if (order.status !== OrderStatus.PENDING) {
+      throw new BadRequestException(`Order can only be confirmed when PENDING`);
+    }
+
+    const previousStatus = order.status;
+
+    // Update order status and payment info
+    order.status = OrderStatus.CONFIRMED;
+    order.isPaid = true;
+    order.paidAt = new Date();
+
+    // Update all fulfillments to processing
+    if (order.fulfillments && order.fulfillments.length > 0) {
+      for (const fulfillment of order.fulfillments) {
+        if (fulfillment.status === FulfillmentStatus.PENDING) {
+          fulfillment.status = FulfillmentStatus.PROCESSING;
+        }
+      }
+    }
+
+    // Add status history
+    order.statusHistory.push({
+      status: OrderStatus.CONFIRMED,
+      previousStatus,
+      createdAt: new Date(),
+      updatedBy: adminId,
+      reason: 'Payment confirmed by admin',
+    });
+
+    await order.save();
+
+    // Send confirmation email
+    try {
+      if (!isGuest) {
+        const user = await this.usersService.findById(
+          (order as OrderDocument).userId.toString(),
+        );
+        await this.ordersEmailService.sendOrderConfirmationEmail(
+          user.email,
+          order.orderId,
+          {
+            totalAmount: order.totalAmount,
+            itemCount: order.items.length,
+            customerName: `${user.firstName} ${user.lastName}`,
+          },
+        );
+      } else {
+        const guestOrder = order as GuestOrderDocument;
+        await this.ordersEmailService.sendOrderConfirmationEmail(
+          guestOrder.customerInfo.email,
+          guestOrder.orderId,
+          {
+            totalAmount: guestOrder.totalAmount,
+            itemCount: guestOrder.items.length,
+            customerName: `${guestOrder.customerInfo.firstName} ${guestOrder.customerInfo.lastName}`,
+          },
+        );
+      }
+    } catch {
+      // Ignore email error
+    }
+
+    return order;
   }
 
   /** Get order details for admin */
@@ -1699,6 +1866,178 @@ export class OrdersService {
       throw new BadRequestException(
         `Fulfillment index ${index} does not exist. Order has ${fulfillments?.length || 0} fulfillments.`,
       );
+    }
+  }
+
+  /**
+   * Auto-cancel unpaid pending orders after 24 hours
+   * Runs every hour to check for expired orders
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_11PM)
+  async autoCancelExpiredOrders(): Promise<{
+    cancelledCount: number;
+    guestCancelledCount: number;
+  }> {
+    this.logger.log('Running auto-cancellation job for expired unpaid orders');
+
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    let cancelledCount = 0;
+    let guestCancelledCount = 0;
+
+    try {
+      // Find unpaid pending orders older than 24 hours (registered users)
+      const expiredOrders = await this.orderModel.find({
+        status: OrderStatus.PENDING,
+        isPaid: false,
+        createdAt: { $lt: twentyFourHoursAgo },
+      });
+
+      this.logger.log(
+        `Found ${expiredOrders.length} expired unpaid registered orders`,
+      );
+
+      // Cancel each expired order with transaction
+      for (const order of expiredOrders) {
+        try {
+          await inTransaction(this.connection, async (session) => {
+            const previousStatus = order.status;
+            order.status = OrderStatus.CANCELLED;
+            order.cancelledAt = new Date();
+            order.cancellationReason =
+              'Automatically cancelled - payment not received within 24 hours';
+            order.statusHistory.push({
+              status: OrderStatus.CANCELLED,
+              previousStatus,
+              reason:
+                'Automatically cancelled - payment not received within 24 hours',
+              updatedBy: 'system',
+              createdAt: new Date(),
+            });
+            order.notes.push({
+              content:
+                'Order automatically cancelled due to non-payment within 24 hours',
+              source: 'system',
+              visibleToCustomer: true,
+              createdAt: new Date(),
+            });
+
+            // Restore stock
+            await this.restoreStock(order.items, session);
+            await order.save({ session });
+          });
+
+          cancelledCount++;
+
+          // Send cancellation email
+          try {
+            await order.populate('userId', 'firstName lastName email');
+            const user = order.userId as any;
+            if (user && user.email) {
+              await this.ordersEmailService.sendCancellationConfirmationEmail(
+                user.email,
+                order.orderId,
+                {
+                  customerName: `${user.firstName} ${user.lastName}`,
+                  refundAmount: 0,
+                  refundTimeline: 'Not applicable',
+                  cancellationReason: 'Payment not received within 24 hours',
+                  orderTotal: order.totalAmount,
+                },
+              );
+            }
+          } catch (emailError) {
+            this.logger.error(
+              `Failed to send cancellation email for order ${order.orderId}: ${emailError.message}`,
+            );
+          }
+        } catch (error) {
+          this.logger.error(
+            `Failed to cancel order ${order.orderId}: ${error.message}`,
+          );
+        }
+      }
+
+      // Find unpaid pending guest orders older than 24 hours
+      const expiredGuestOrders = await this.guestOrderModel.find({
+        status: OrderStatus.PENDING,
+        isPaid: false,
+        createdAt: { $lt: twentyFourHoursAgo },
+      });
+
+      this.logger.log(
+        `Found ${expiredGuestOrders.length} expired unpaid guest orders`,
+      );
+
+      // Cancel each expired guest order with transaction
+      for (const guestOrder of expiredGuestOrders) {
+        try {
+          await inTransaction(this.connection, async (session) => {
+            const previousStatus = guestOrder.status;
+            guestOrder.status = OrderStatus.CANCELLED;
+            guestOrder.cancelledAt = new Date();
+            guestOrder.cancellationReason =
+              'Automatically cancelled - payment not received within 24 hours';
+            guestOrder.statusHistory.push({
+              status: OrderStatus.CANCELLED,
+              previousStatus,
+              reason:
+                'Automatically cancelled - payment not received within 24 hours',
+              updatedBy: 'system',
+              createdAt: new Date(),
+            });
+            guestOrder.notes.push({
+              content:
+                'Order automatically cancelled due to non-payment within 24 hours',
+              source: 'system',
+              visibleToCustomer: true,
+              createdAt: new Date(),
+            });
+
+            // Restore stock
+            await this.restoreStock(guestOrder.items, session);
+            await guestOrder.save({ session });
+          });
+
+          guestCancelledCount++;
+
+          // Send cancellation email
+          try {
+            const { email, firstName, lastName } = guestOrder.customerInfo;
+            await this.ordersEmailService.sendCancellationConfirmationEmail(
+              email,
+              guestOrder.orderId,
+              {
+                customerName: `${firstName} ${lastName}`,
+                refundAmount: 0,
+                refundTimeline: 'Not applicable',
+                cancellationReason: 'Payment not received within 24 hours',
+                orderTotal: guestOrder.totalAmount,
+              },
+            );
+          } catch (emailError) {
+            this.logger.error(
+              `Failed to send cancellation email for guest order ${guestOrder.orderId}: ${emailError.message}`,
+            );
+          }
+        } catch (error) {
+          this.logger.error(
+            `Failed to cancel guest order ${guestOrder.orderId}: ${error.message}`,
+          );
+        }
+      }
+
+      this.logger.log(
+        `Auto-cancellation complete: ${cancelledCount} registered orders, ${guestCancelledCount} guest orders cancelled`,
+      );
+
+      return { cancelledCount, guestCancelledCount };
+    } catch (error) {
+      this.logger.error(
+        `Error in auto-cancellation job: ${error.message}`,
+        error.stack,
+      );
+      return { cancelledCount, guestCancelledCount };
     }
   }
 }

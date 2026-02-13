@@ -8,6 +8,8 @@ const origins: Record<string, string[]> = {
   production: [''],
   development: [
     'http://192.168.0.198:5173',
+    'http://192.168.18.2:5173',
+    'http://192.168.18.2:5174',
     'http://localhost:5173',
     'http://localhost:5174',
   ],
@@ -39,7 +41,8 @@ async function bootstrap() {
     origin: origins[config.env.name] ?? false,
   });
 
-  await app.listen(config.server.port);
+  // Listen on all interfaces (0.0.0.0) to allow mobile access
+  await app.listen(config.server.port, '0.0.0.0');
 }
 
 void bootstrap();

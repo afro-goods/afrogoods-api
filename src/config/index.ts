@@ -12,11 +12,6 @@ interface EnvVars {
   JWT_SECRET: string;
   JWT_EXPIRES_IN: string;
 
-  REDIS_URL?: string;
-  REDIS_HOST: string;
-  REDIS_PORT: number;
-  REDIS_PASSWORD?: string;
-
   CLOUDINARY_URL?: string;
   CLOUDINARY_CLOUD_NAME: string;
   CLOUDINARY_API_KEY: string;
@@ -37,14 +32,6 @@ const schema = joi
 
     JWT_SECRET: joi.string().required(),
     JWT_EXPIRES_IN: joi.string().default('1d'),
-
-    REDIS_URL: joi
-      .string()
-      .uri({ scheme: ['redis', 'rediss'] })
-      .optional(),
-    REDIS_HOST: joi.string().required(),
-    REDIS_PORT: joi.number().required(),
-    REDIS_PASSWORD: joi.string().allow('').optional(),
 
     CLOUDINARY_URL: joi
       .string()
@@ -87,12 +74,6 @@ export const config = {
   auth: {
     jwtSecret: env.JWT_SECRET,
     jwtExpiresIn: env.JWT_EXPIRES_IN,
-  },
-  redis: {
-    url: env.REDIS_URL || undefined,
-    host: env.REDIS_HOST,
-    port: env.REDIS_PORT,
-    password: env.REDIS_PASSWORD || undefined,
   },
   cloudinary: {
     url: env.CLOUDINARY_URL || undefined,

@@ -1,17 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { EmailQueueService } from '../../queue/services/email-queue.service';
+import { EmailService } from '../../shared/services/email/email.service';
 import {
   SendOrderStatusUpdateEmailDto,
-  SendAdminCommunicationEmailDto,
+  SendOrderConfirmationEmailDto,
   SendCancellationConfirmationEmailDto,
-} from '../../queue/dto/order-email-job.dto';
-import { SendOrderConfirmationEmailDto } from '../../queue/dto/email-job.dto';
+} from '../../shared/services/email/dto/email.dto';
 
 @Injectable()
 export class OrdersEmailService {
   private readonly logger = new Logger(OrdersEmailService.name);
 
-  constructor(private readonly emailQueueService: EmailQueueService) {}
+  constructor(private readonly emailService: EmailService) {}
 
   /**
    * Send order confirmation email
@@ -22,7 +21,7 @@ export class OrdersEmailService {
     orderDetails: Record<string, any>,
   ): Promise<void> {
     this.logger.log(
-      `Queuing order confirmation email for ${email}, order: ${orderId}`,
+      `Sending order confirmation email for ${email}, order: ${orderId}`,
     );
 
     const dto: SendOrderConfirmationEmailDto = {
@@ -31,7 +30,14 @@ export class OrdersEmailService {
       orderDetails,
     };
 
-    await this.emailQueueService.sendOrderConfirmationEmail(dto);
+    try {
+      await this.emailService.sendOrderConfirmationEmail(dto);
+    } catch (error) {
+      this.logger.error(
+        `Failed to send order confirmation email: ${error.message}`,
+      );
+      // Don't throw - email failures shouldn't block operations
+    }
   }
 
   /**
@@ -43,7 +49,7 @@ export class OrdersEmailService {
     statusData: Record<string, any>,
   ): Promise<void> {
     this.logger.log(
-      `Queuing status update email for ${email}, order: ${orderId}`,
+      `Sending status update email for ${email}, order: ${orderId}`,
     );
 
     const dto: SendOrderStatusUpdateEmailDto = {
@@ -52,28 +58,14 @@ export class OrdersEmailService {
       statusData,
     };
 
-    await this.emailQueueService.sendOrderStatusUpdateEmail(dto);
-  }
-
-  /**
-   * Send admin communication email
-   */
-  async sendAdminCommunicationEmail(
-    email: string,
-    subject: string,
-    template: string,
-    data: Record<string, any>,
-  ): Promise<void> {
-    this.logger.log(`Queuing admin communication email for ${email}`);
-
-    const dto: SendAdminCommunicationEmailDto = {
-      email,
-      subject,
-      template,
-      data,
-    };
-
-    await this.emailQueueService.sendAdminCommunicationEmail(dto);
+    try {
+      await this.emailService.sendOrderStatusUpdateEmail(dto);
+    } catch (error) {
+      this.logger.error(
+        `Failed to send order status update email: ${error.message}`,
+      );
+      // Don't throw - email failures shouldn't block operations
+    }
   }
 
   /**
@@ -91,7 +83,7 @@ export class OrdersEmailService {
     },
   ): Promise<void> {
     this.logger.log(
-      `Queuing cancellation confirmation email for ${email}, order: ${orderId}`,
+      `Sending cancellation confirmation email for ${email}, order: ${orderId}`,
     );
 
     const dto: SendCancellationConfirmationEmailDto = {
@@ -100,6 +92,41 @@ export class OrdersEmailService {
       cancellationData,
     };
 
-    await this.emailQueueService.sendCancellationConfirmationEmail(dto);
+    try {
+      await this.emailService.sendCancellationConfirmationEmail(dto);
+    } catch (error) {
+      this.logger.error(
+        `Failed to send cancellation confirmation email: ${error.message}`,
+      );
+      // Don't throw - email failures shouldn't block operations
+    }
+  }
+
+  /**
+   * Send admin order notification
+   */
+  async sendAdminOrderNotification(
+    adminEmail: string,
+    orderId: string,
+    totalAmount: number,
+    customerName: string,
+    customerEmail: string,
+  ): Promise<void> {
+    this.logger.log(`Sending admin order notification for order: ${orderId}`);
+
+    try {
+      await this.emailService.sendAdminOrderNotification({
+        adminEmail,
+        orderId,
+        totalAmount,
+        customerName,
+        customerEmail,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to send admin order notification: ${error.message}`,
+      );
+      // Don't throw - email failures shouldn't block operations
+    }
   }
 }

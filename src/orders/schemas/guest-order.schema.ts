@@ -9,16 +9,16 @@ export type GuestOrderDocument = GuestOrder & Document;
 
 @Schema({ _id: false })
 export class CustomerInfo {
-  @Prop({ required: true })
+  @Prop({ type: String, required: true })
   firstName: string;
 
-  @Prop({ required: true })
+  @Prop({ type: String, required: true })
   lastName: string;
 
-  @Prop({ required: true })
+  @Prop({ type: String, required: true })
   email: string;
 
-  @Prop({ required: true })
+  @Prop({ type: String, required: true })
   phone: string;
 }
 
@@ -26,19 +26,19 @@ export const CustomerInfoSchema = SchemaFactory.createForClass(CustomerInfo);
 
 @Schema({ _id: false })
 export class GuestAddress {
-  @Prop({ required: true })
+  @Prop({ type: String, required: true })
   street: string;
 
-  @Prop({ required: true })
+  @Prop({ type: String, required: true })
   city: string;
 
-  @Prop({ required: true })
+  @Prop({ type: String, required: true })
   state: string;
 
-  @Prop({ required: true })
+  @Prop({ type: String, required: true })
   postalCode: string;
 
-  @Prop({ required: true })
+  @Prop({ type: String, required: true })
   country: string;
 }
 
@@ -46,7 +46,7 @@ export const GuestAddressSchema = SchemaFactory.createForClass(GuestAddress);
 
 @Schema({ timestamps: true })
 export class GuestOrder {
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ type: String, required: true, unique: true, index: true })
   orderId: string;
 
   @Prop({ type: CustomerInfoSchema, required: true })
@@ -61,17 +61,20 @@ export class GuestOrder {
   @Prop({ type: [OrderItemSchema], default: [] })
   items: OrderItem[];
 
-  @Prop({ required: true })
+  @Prop({ type: Number, required: true })
   totalAmount: number;
 
   @Prop({ type: String, enum: OrderStatus, default: OrderStatus.PENDING })
   status: OrderStatus;
 
-  @Prop()
+  @Prop({ type: String })
   paymentIntentId?: string;
 
-  @Prop({ default: false })
+  @Prop({ type: Boolean, default: false })
   isPaid: boolean;
+
+  @Prop({ type: Date })
+  paidAt?: Date;
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
   userId?: Types.ObjectId;
@@ -82,13 +85,13 @@ export class GuestOrder {
   @Prop({ type: [Object], default: [] })
   statusHistory: StatusHistory[];
 
-  @Prop()
+  @Prop({ type: Date })
   anonymizedAt?: Date;
 
-  @Prop()
+  @Prop({ type: Date })
   cancelledAt?: Date;
 
-  @Prop()
+  @Prop({ type: String })
   cancellationReason?: string;
 
   @Prop({ type: [FulfillmentSchema], default: [] })

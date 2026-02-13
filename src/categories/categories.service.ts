@@ -16,35 +16,13 @@ import { BatchCreateCategoryDto } from './dto/batch-create-category.dto';
 import { CategoryType } from './enums/category-type.enum';
 import { inTransaction } from 'src/utilities/transaction';
 import { MediaService } from 'src/shared/services/media/services/media.service';
-import {
-  CacheService,
-  CacheKeyBuilder,
-  CacheTTL,
-} from 'src/shared/services/cache';
 import { cleanBase64 } from 'src/utilities/files';
 import { FileInput } from 'src/shared/inputs/file.input';
-
-export interface CategoryWithChildren {
-  _id: string;
-  name: string;
-  description?: string;
-  type: CategoryType;
-  isActive: boolean;
-  parentId: string | null;
-  image?: string;
-  subcategories?: CategoryWithChildren[];
-  productCount?: number;
-}
-
-export interface CategoryTree {
-  parents: CategoryWithChildren[];
-}
-
-export interface BatchCreateResult {
-  parent: CategoryDocument;
-  subcategories: CategoryDocument[];
-  totalCreated: number;
-}
+import {
+  BatchCreateResult,
+  CategoryTree,
+  CategoryWithChildren,
+} from './interfaces/category.interface';
 
 @Injectable()
 export class CategoriesService {
@@ -58,7 +36,6 @@ export class CategoriesService {
     @InjectModel(Advert.name)
     private advertModel: Model<AdvertDocument>,
     private readonly mediaService: MediaService,
-    private readonly cacheService: CacheService,
   ) {}
 
   private escapeRegex(str: string): string {
@@ -195,23 +172,11 @@ export class CategoriesService {
         { session },
       );
 
-      // Invalidate all category caches
-      await this.cacheService.deleteByPattern(
-        CacheKeyBuilder.categoryPattern(),
-      );
-
       return category;
     });
   }
 
   async findAll(query?: CategoryQueryDto): Promise<CategoryDocument[]> {
-    // Try cache first (only for simple queries without filters)
-    if (!query?.type && !query?.parentsOnly) {
-      const cacheKey = CacheKeyBuilder.categoryAll();
-      const cached = await this.cacheService.get<CategoryDocument[]>(cacheKey);
-      if (cached) return cached;
-    }
-
     const filter: Record<string, unknown> = { isActive: true };
     if (query?.type) filter.type = query.type;
     if (query?.parentsOnly) {
@@ -225,26 +190,12 @@ export class CategoriesService {
       .lean()
       .exec();
 
-    // Cache only simple queries
-    if (!query?.type && !query?.parentsOnly) {
-      const cacheKey = CacheKeyBuilder.categoryAll();
-      await this.cacheService.set(cacheKey, result, CacheTTL.CATEGORY_ALL);
-    }
-
     return result;
   }
 
   async findById(id: string): Promise<CategoryDocument> {
-    // Try cache first
-    const cacheKey = CacheKeyBuilder.categorySingle(id);
-    const cached = await this.cacheService.get<CategoryDocument>(cacheKey);
-    if (cached) return cached;
-
     const category = await this.categoryModel.findById(id).lean().exec();
     if (!category) throw new NotFoundException('Category not found');
-
-    // Cache the result
-    await this.cacheService.set(cacheKey, category, CacheTTL.CATEGORY_SINGLE);
 
     return category;
   }
@@ -357,11 +308,6 @@ export class CategoriesService {
       if (!updatedCategory)
         throw new NotFoundException('Category not found after update');
 
-      // Invalidate all category caches
-      await this.cacheService.deleteByPattern(
-        CacheKeyBuilder.categoryPattern(),
-      );
-
       return updatedCategory;
     });
   }
@@ -417,11 +363,6 @@ export class CategoriesService {
       }
 
       await this.categoryModel.findByIdAndDelete(id).session(session);
-
-      // Invalidate all category caches
-      await this.cacheService.deleteByPattern(
-        CacheKeyBuilder.categoryPattern(),
-      );
 
       return { message: 'Category deleted successfully' };
     });
@@ -506,11 +447,6 @@ export class CategoriesService {
         createdSubcategories.push(subcategory);
       }
 
-      // Invalidate all category caches
-      await this.cacheService.deleteByPattern(
-        CacheKeyBuilder.categoryPattern(),
-      );
-
       return {
         parent,
         subcategories: createdSubcategories,
@@ -520,11 +456,6 @@ export class CategoriesService {
   }
 
   async findParentCategories(type?: CategoryType): Promise<CategoryDocument[]> {
-    // Try cache first
-    const cacheKey = CacheKeyBuilder.categoryParents(type);
-    const cached = await this.cacheService.get<CategoryDocument[]>(cacheKey);
-    if (cached) return cached;
-
     const filter: Record<string, unknown> = {
       $or: [{ parentId: null }, { parentId: { $exists: false } }],
       isActive: true,
@@ -538,18 +469,10 @@ export class CategoriesService {
       .lean()
       .exec();
 
-    // Cache the result
-    await this.cacheService.set(cacheKey, result, CacheTTL.CATEGORY_PARENTS);
-
     return result;
   }
 
   async findSubcategories(parentId: string): Promise<CategoryDocument[]> {
-    // Try cache first
-    const cacheKey = CacheKeyBuilder.categorySubcategories(parentId);
-    const cached = await this.cacheService.get<CategoryDocument[]>(cacheKey);
-    if (cached) return cached;
-
     const result = await this.categoryModel
       .find({ parentId: new Types.ObjectId(parentId), isActive: true })
       .select('name description isActive type parentId image')
@@ -557,22 +480,10 @@ export class CategoriesService {
       .lean()
       .exec();
 
-    // Cache the result
-    await this.cacheService.set(
-      cacheKey,
-      result,
-      CacheTTL.CATEGORY_SUBCATEGORIES,
-    );
-
     return result;
   }
 
   async getCategoryTree(type?: CategoryType): Promise<CategoryTree> {
-    // Try cache first
-    const cacheKey = CacheKeyBuilder.categoryTree(type);
-    const cached = await this.cacheService.get<CategoryTree>(cacheKey);
-    if (cached) return cached;
-
     const filter: Record<string, unknown> = { isActive: true };
     if (type) filter.type = type;
 
@@ -583,11 +494,20 @@ export class CategoriesService {
       .lean()
       .exec();
 
+    // Count products for product categories
     const productCounts = await this.productModel.aggregate([
       { $group: { _id: '$category', count: { $sum: 1 } } },
     ]);
-    const countMap = new Map(
+    const productCountMap = new Map(
       productCounts.map((p) => [p._id?.toString(), p.count]),
+    );
+
+    // Count adverts for advert categories
+    const advertCounts = await this.advertModel.aggregate([
+      { $group: { _id: '$category', count: { $sum: 1 } } },
+    ]);
+    const advertCountMap = new Map(
+      advertCounts.map((a) => [a._id?.toString(), a.count]),
     );
 
     const parentCategories = allCategories.filter((c) => !c.parentId);
@@ -605,6 +525,11 @@ export class CategoriesService {
     const parents: CategoryWithChildren[] = parentCategories.map((parent) => {
       const parentIdStr = (parent as any)._id.toString();
       const subs = subcategoriesMap.get(parentIdStr) || [];
+      
+      // Use appropriate count based on category type
+      const parentCount = parent.type === CategoryType.ADVERT
+        ? advertCountMap.get(parentIdStr) || 0
+        : productCountMap.get(parentIdStr) || 0;
 
       return {
         _id: parentIdStr,
@@ -614,25 +539,30 @@ export class CategoriesService {
         isActive: parent.isActive,
         parentId: null,
         image: parent.image,
-        productCount: countMap.get(parentIdStr) || 0,
-        subcategories: subs.map((sub) => ({
-          _id: (sub as any)._id.toString(),
-          name: sub.name,
-          description: sub.description,
-          type: sub.type,
-          isActive: sub.isActive,
-          parentId: parentIdStr,
-          image: sub.image,
-          productCount: countMap.get((sub as any)._id.toString()) || 0,
-          subcategories: [],
-        })),
+        productCount: parentCount,
+        subcategories: subs.map((sub) => {
+          const subIdStr = (sub as any)._id.toString();
+          // Use appropriate count based on subcategory type
+          const subCount = sub.type === CategoryType.ADVERT
+            ? advertCountMap.get(subIdStr) || 0
+            : productCountMap.get(subIdStr) || 0;
+
+          return {
+            _id: subIdStr,
+            name: sub.name,
+            description: sub.description,
+            type: sub.type,
+            isActive: sub.isActive,
+            parentId: parentIdStr,
+            image: sub.image,
+            productCount: subCount,
+            subcategories: [],
+          };
+        }),
       };
     });
 
     const result = { parents };
-
-    // Cache the result
-    await this.cacheService.set(cacheKey, result, CacheTTL.CATEGORY_TREE);
 
     return result;
   }
@@ -640,7 +570,11 @@ export class CategoriesService {
   async findByIdWithSubcategories(id: string): Promise<CategoryWithChildren> {
     const category = await this.findById(id);
     const subcategories = await this.findSubcategories(id);
-    const productCount = await this.getProductCount(id);
+    
+    // Use appropriate count based on category type
+    const productCount = category.type === CategoryType.ADVERT
+      ? await this.getAdvertCount(id)
+      : await this.getProductCount(id);
 
     return {
       _id: (category as any)._id.toString(),
@@ -652,17 +586,25 @@ export class CategoriesService {
       image: category.image,
       productCount,
       subcategories: await Promise.all(
-        subcategories.map(async (sub) => ({
-          _id: (sub as any)._id.toString(),
-          name: sub.name,
-          description: sub.description,
-          type: sub.type,
-          isActive: sub.isActive,
-          parentId: id,
-          image: sub.image,
-          productCount: await this.getProductCount((sub as any)._id.toString()),
-          subcategories: [],
-        })),
+        subcategories.map(async (sub) => {
+          const subIdStr = (sub as any)._id.toString();
+          // Use appropriate count based on subcategory type
+          const subCount = sub.type === CategoryType.ADVERT
+            ? await this.getAdvertCount(subIdStr)
+            : await this.getProductCount(subIdStr);
+
+          return {
+            _id: subIdStr,
+            name: sub.name,
+            description: sub.description,
+            type: sub.type,
+            isActive: sub.isActive,
+            parentId: id,
+            image: sub.image,
+            productCount: subCount,
+            subcategories: [],
+          };
+        }),
       ),
     };
   }

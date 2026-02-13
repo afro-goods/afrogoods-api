@@ -4,11 +4,9 @@ import {
   IsNotEmpty,
   IsObject,
   IsOptional,
-  IsNumber,
-  Min,
-  Max,
 } from 'class-validator';
 
+// Base email job DTO
 export class EmailJobDto {
   @IsEmail()
   @IsNotEmpty()
@@ -27,6 +25,7 @@ export class EmailJobDto {
   data?: Record<string, any>;
 }
 
+// Welcome email DTO
 export class SendWelcomeEmailDto {
   @IsEmail()
   @IsNotEmpty()
@@ -37,6 +36,7 @@ export class SendWelcomeEmailDto {
   name: string;
 }
 
+// Password reset email DTO
 export class SendPasswordResetEmailDto {
   @IsEmail()
   @IsNotEmpty()
@@ -51,6 +51,7 @@ export class SendPasswordResetEmailDto {
   name: string;
 }
 
+// Verification email DTO
 export class SendVerificationEmailDto {
   @IsEmail()
   @IsNotEmpty()
@@ -65,6 +66,7 @@ export class SendVerificationEmailDto {
   name: string;
 }
 
+// Order confirmation email DTO
 export class SendOrderConfirmationEmailDto {
   @IsEmail()
   @IsNotEmpty()
@@ -79,12 +81,61 @@ export class SendOrderConfirmationEmailDto {
   orderDetails: Record<string, any>;
 }
 
-export class EmailPriorityDto {
-  @IsNumber()
-  @Min(1)
-  @Max(10)
-  @IsOptional()
-  priority?: number;
+// Order status update email DTO
+export class SendOrderStatusUpdateEmailDto {
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @IsString()
+  @IsNotEmpty()
+  orderId: string;
+
+  @IsObject()
+  @IsNotEmpty()
+  statusData: Record<string, any>;
+}
+
+// Admin communication email DTO
+export class SendAdminCommunicationEmailDto {
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @IsString()
+  @IsNotEmpty()
+  subject: string;
+
+  @IsString()
+  @IsNotEmpty()
+  template: string;
+
+  @IsObject()
+  @IsNotEmpty()
+  data: Record<string, any>;
+}
+
+// Order cancellation email DTO
+export class SendCancellationConfirmationEmailDto {
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @IsString()
+  @IsNotEmpty()
+  orderId: string;
+
+  @IsObject()
+  @IsNotEmpty()
+  cancellationData: {
+    customerName: string;
+    refundAmount: number;
+    refundTimeline: string;
+    cancellationReason: string;
+    orderTotal: number;
+    items?: Array<{ name: string; quantity: number; price: number }>;
+    refundMethod?: string;
+  };
 }
 
 export class SendAdvertSubmittedEmailDto {

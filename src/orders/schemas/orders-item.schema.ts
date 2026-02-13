@@ -8,13 +8,12 @@ export class OrderItem {
   @Prop({ type: Types.ObjectId, ref: Product.name, required: true })
   productId: Types.ObjectId;
 
-  @Prop({ required: true })
+  @Prop({ type: Number, required: true })
   quantity: number;
 
-  @Prop({ required: true })
+  @Prop({ type: Number, required: true })
   priceAtPurchase: number;
 
-  // Delivery timeline captured at purchase time
   @Prop({ type: String, enum: DeliveryTimeUnit })
   deliveryTimeUnit?: DeliveryTimeUnit;
 

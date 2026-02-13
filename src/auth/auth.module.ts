@@ -6,9 +6,10 @@ import { UsersModule } from '../users/users.module';
 import { FirebaseAuthGuard } from './guards/firebase-auth.guard';
 import { FirebaseRegisterGuard } from './guards/firebase-register.guard';
 import { FirebaseModule } from '../firebase/firebase.module';
+import { SharedModule } from '../shared/shared.module';
 
 @Module({
-  imports: [UsersModule, FirebaseModule],
+  imports: [UsersModule, FirebaseModule, SharedModule],
   controllers: [AuthController],
   providers: [AuthService, FirebaseAuthGuard, FirebaseRegisterGuard],
   exports: [AuthService, FirebaseAuthGuard, FirebaseRegisterGuard],

@@ -6,7 +6,7 @@ export type ProductAttributeDocument = ProductAttribute & Document;
 
 @Schema({ _id: false })
 export class AttributeOption {
-  @Prop({ required: true, trim: true })
+  @Prop({ type: String, required: true, trim: true })
   name: string;
 
   @Prop({ type: Number, required: true, default: 0 })
@@ -21,7 +21,7 @@ export class ProductAttribute {
   @Prop({ type: Types.ObjectId, ref: 'Product', required: true })
   productId: Types.ObjectId;
 
-  @Prop({ required: true, trim: true })
+  @Prop({ type: String, required: true, trim: true })
   name: string;
 
   @Prop({

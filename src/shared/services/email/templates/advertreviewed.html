@@ -1,0 +1,58 @@
+<h2>Your Advert Has Been Reviewed</h2>
+
+<p>{{#if customerName}}Hello {{customerName}},{{else}}Hello,{{/if}}</p>
+
+{{#if (eq status "approved")}}
+  <p>Great news! Your advert has been <strong>approved</strong> and is now live on {{appName}}.</p>
+
+  <div style="background-color: #d4edda; padding: 20px; border-left: 4px solid #28a745; border-radius: 3px; margin: 20px 0;">
+    <h3 style="margin-top: 0; color: #155724;">✓ Approved</h3>
+    <p style="margin: 0; color: #155724;">Your advert is now visible to our community. Thank you for contributing to {{appName}}!</p>
+  </div>
+{{/if}}
+
+{{#if (eq status "rejected")}}
+  <p>Your advert has been reviewed. Unfortunately, we are unable to approve it at this time.</p>
+
+  <div style="background-color: #f8d7da; padding: 20px; border-left: 4px solid #dc3545; border-radius: 3px; margin: 20px 0;">
+    <h3 style="margin-top: 0; color: #721c24;">Review outcome</h3>
+    <p style="margin: 0; color: #721c24;">{{#if rejectionReason}}{{rejectionReason}}{{else}}It did not meet our current guidelines. You may edit and resubmit your advert.{{/if}}</p>
+  </div>
+
+  <p>You can update your advert and submit it again for review from your dashboard.</p>
+{{/if}}
+
+<div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
+  <h3 style="margin-top: 0;">Advert Details</h3>
+  <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td style="padding: 5px 0;"><strong>Title:</strong></td>
+      <td style="padding: 5px 0; text-align: right;">{{advertTitle}}</td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 0;"><strong>Status:</strong></td>
+      <td style="padding: 5px 0; text-align: right;">
+        {{#if (eq status "approved")}}
+          <span style="padding: 3px 10px; background-color: #28a745; color: white; border-radius: 3px; font-size: 14px;">Approved</span>
+        {{else}}
+          <span style="padding: 3px 10px; background-color: #dc3545; color: white; border-radius: 3px; font-size: 14px;">Rejected</span>
+        {{/if}}
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 0;"><strong>Reviewed on:</strong></td>
+      <td style="padding: 5px 0; text-align: right;">{{formatDate reviewedAt}}</td>
+    </tr>
+  </table>
+</div>
+
+<div class="text-center">
+  <a href="{{appUrl}}/adverts/me" class="button">View My Adverts</a>
+</div>
+
+<hr class="divider">
+
+<p>If you have any questions, please contact our support team.</p>
+
+<p>Best regards,<br>
+<strong>The {{appName}} Team</strong></p>

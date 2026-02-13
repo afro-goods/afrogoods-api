@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 import { UsersService } from '../users/users.service';
-import { EmailQueueService } from '../queue/services/email-queue.service';
+import { EmailService } from '../shared/services/email/email.service';
 import { RegisterDto } from './dto/register.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { UserRole } from 'src/users/interfaces/user.interface';
@@ -18,7 +18,7 @@ export class AuthService {
   constructor(
     @Inject('FIREBASE_ADMIN') private firebaseAdmin: typeof admin,
     private usersService: UsersService,
-    private emailQueueService: EmailQueueService,
+    private emailService: EmailService,
   ) {}
 
   async register(registerDto: RegisterDto, firebaseUid: string) {
@@ -60,11 +60,14 @@ export class AuthService {
         address: registerDto.address,
       });
 
-      // Send welcome email asynchronously
-      await this.emailQueueService.sendWelcomeEmail({
-        email: user.email,
-        name: user.firstName || user.username || 'User',
-      });
+      try {
+        await this.emailService.sendWelcomeEmail({
+          email: user.email,
+          name: user.firstName || user.username || 'User',
+        });
+      } catch (emailError) {
+        console.error('Failed to send welcome email:', emailError);
+      }
 
       return {
         message: 'User registered successfully',
@@ -132,7 +135,7 @@ export class AuthService {
         .auth()
         .generatePasswordResetLink(dto.email);
       const name = user.firstName || 'there';
-      await this.emailQueueService.sendPasswordResetEmail({
+      await this.emailService.sendPasswordResetEmail({
         email: user.email,
         token: resetLink,
         name,

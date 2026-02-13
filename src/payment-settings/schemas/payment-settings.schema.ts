@@ -3,16 +3,16 @@ import { Document } from 'mongoose';
 
 @Schema({ timestamps: true })
 export class PaymentSettings extends Document {
-  @Prop({ required: true, default: 'default', unique: true })
+  @Prop({ type: String, required: true, default: 'default', unique: true })
   settingsType: string;
 
-  @Prop({ required: true, trim: true })
+  @Prop({ type: String, required: true, trim: true })
   eTransferEmail: string;
 
-  @Prop({ required: true, trim: true })
+  @Prop({ type: String, required: true, trim: true })
   whatsappNumber: string;
 
-  @Prop({ trim: true })
+  @Prop({ type: String, trim: true })
   paymentInstructions?: string;
 }
 

@@ -266,43 +266,28 @@ export class OrdersService {
     }
   }
 
-  private prepareEmailData(order: any, customerInfo: any) {
-    return {
-      total: order.totalAmount,
-      itemCount: order.items.length,
-      customerName: `${customerInfo.firstName} ${customerInfo.lastName}`,
-      orderId: order.orderId,
-      orderDate: order.createdAt || new Date(),
-      currency: 'CA$',
-      items: order.items.map((item: any) => ({
-        name: item.productId?.name || 'Product',
-        quantity: item.quantity,
-        price: item.priceAtPurchase,
-      })),
-      subtotal: order.totalAmount,
-      shippingCost: 0,
-      shippingAddress: {
-        name: `${customerInfo.firstName} ${customerInfo.lastName}`,
-        street:
-          order.shippingAddress?.street ||
-          order.shippingAddress?.streetAddress ||
-          '',
-        city: order.shippingAddress?.city || '',
-        state: order.shippingAddress?.state || '',
-        zipCode: order.shippingAddress?.postalCode || '',
-        country: order.shippingAddress?.country || 'Canada',
-      },
-      paymentMethod: 'E-Transfer',
-      appUrl: process.env.APP_URL || 'https://afrogoods.com',
-    };
-  }
-
   // ============================================================
   // CUSTOMER OPERATIONS
   // ============================================================
 
   /** Create order from cart for registered user (with transaction) */
   async createOrder(userId: string): Promise<OrderDocument> {
+    const recentOrder = await this.orderModel
+      .findOne({
+        userId: new Types.ObjectId(userId),
+        status: OrderStatus.PENDING,
+        createdAt: { $gte: new Date(Date.now() - 30000) }, // Last 30 seconds
+      })
+      .sort({ createdAt: -1 })
+      .exec();
+
+    if (recentOrder) {
+      this.logger.warn(
+        `Duplicate order attempt detected for user ${userId}. Returning existing order ${recentOrder.orderId}`,
+      );
+      return recentOrder;
+    }
+
     const order = await inTransaction(this.connection, async (session) => {
       const cart = await this.cartModel.findOne({ userId }).session(session);
       if (!cart || cart.items.length === 0) {
@@ -366,25 +351,37 @@ export class OrdersService {
 
     try {
       const user = await this.usersService.findById(userId);
-      const emailData = this.prepareEmailData(order, user);
-
-      await this.ordersEmailService.sendOrderConfirmationEmail(
-        user.email,
-        order.orderId,
-        emailData,
+      const emailData = this.ordersEmailService.prepareOrderConfirmationData(
+        order,
+        user,
       );
 
-      // Send admin notification
-      const settings = await this.paymentSettingsService.getSettings();
-      await this.ordersEmailService.sendAdminOrderNotification(
-        settings.eTransferEmail,
-        order.orderId,
-        order.totalAmount,
-        `${user.firstName} ${user.lastName}`,
-        user.email,
+      // Send emails asynchronously without blocking the response
+      Promise.all([
+        this.ordersEmailService.sendOrderConfirmationEmail(
+          user.email,
+          order.orderId,
+          emailData,
+        ),
+        (async () => {
+          const settings = await this.paymentSettingsService.getSettings();
+          return this.ordersEmailService.sendAdminOrderNotification(
+            settings.eTransferEmail,
+            order.orderId,
+            order.totalAmount,
+            `${user.firstName} ${user.lastName}`,
+            user.email,
+          );
+        })(),
+      ]).catch((error) => {
+        this.logger.warn(
+          `Failed to send order emails for ${order.orderId}: ${error.message}`,
+        );
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to prepare order emails for ${order.orderId}: ${error.message}`,
       );
-    } catch {
-      // Don't fail order creation if email fails
     }
     return order;
   }
@@ -563,6 +560,22 @@ export class OrdersService {
 
   /** Create guest order - items sent directly from frontend */
   async createGuestOrder(dto: GuestCheckoutDto): Promise<GuestOrderDocument> {
+    const recentOrder = await this.guestOrderModel
+      .findOne({
+        'customerInfo.email': dto.customerInfo.email,
+        status: OrderStatus.PENDING,
+        createdAt: { $gte: new Date(Date.now() - 30000) },
+      })
+      .sort({ createdAt: -1 })
+      .exec();
+
+    if (recentOrder) {
+      this.logger.warn(
+        `Duplicate guest order attempt detected for ${dto.customerInfo.email}. Returning existing order ${recentOrder.orderId}`,
+      );
+      return recentOrder;
+    }
+
     const guestOrder = await inTransaction(this.connection, async (session) => {
       if (!dto.items || dto.items.length === 0) {
         throw new BadRequestException('Cart is empty');
@@ -624,28 +637,37 @@ export class OrdersService {
 
     try {
       const { email, firstName, lastName } = guestOrder.customerInfo;
-      const emailData = this.prepareEmailData(
+      const emailData = this.ordersEmailService.prepareOrderConfirmationData(
         guestOrder,
         guestOrder.customerInfo,
       );
 
-      await this.ordersEmailService.sendOrderConfirmationEmail(
-        email,
-        guestOrder.orderId,
-        emailData,
+      // Send emails asynchronously without blocking the response
+      Promise.all([
+        this.ordersEmailService.sendOrderConfirmationEmail(
+          email,
+          guestOrder.orderId,
+          emailData,
+        ),
+        (async () => {
+          const settings = await this.paymentSettingsService.getSettings();
+          return this.ordersEmailService.sendAdminOrderNotification(
+            settings.eTransferEmail,
+            guestOrder.orderId,
+            guestOrder.totalAmount,
+            `${firstName} ${lastName}`,
+            email,
+          );
+        })(),
+      ]).catch((error) => {
+        this.logger.warn(
+          `Failed to send guest order emails for ${guestOrder.orderId}: ${error.message}`,
+        );
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to prepare guest order emails for ${guestOrder.orderId}: ${error.message}`,
       );
-
-      // Send admin notification
-      const settings = await this.paymentSettingsService.getSettings();
-      await this.ordersEmailService.sendAdminOrderNotification(
-        settings.eTransferEmail,
-        guestOrder.orderId,
-        guestOrder.totalAmount,
-        `${firstName} ${lastName}`,
-        email,
-      );
-    } catch {
-      // Don't fail order creation if email fails
     }
     return guestOrder;
   }
@@ -1109,35 +1131,58 @@ export class OrdersService {
 
     await order.save();
 
-    // Send confirmation email
+    // Send payment confirmation email (order confirmation with payment confirmed message)
+    // Send asynchronously without blocking the response
     try {
       if (!isGuest) {
         const user = await this.usersService.findById(
           (order as OrderDocument).userId.toString(),
         );
-        await this.ordersEmailService.sendOrderConfirmationEmail(
-          user.email,
-          order.orderId,
-          {
-            totalAmount: order.totalAmount,
-            itemCount: order.items.length,
-            customerName: `${user.firstName} ${user.lastName}`,
-          },
+        const emailData = this.ordersEmailService.prepareOrderConfirmationData(
+          order,
+          user,
         );
+
+        // Override the default message to indicate payment is confirmed
+        this.ordersEmailService
+          .sendOrderConfirmationEmail(user.email, order.orderId, {
+            ...emailData,
+            specialInstructions:
+              '✓ Payment Confirmed: Your order is now being processed and will be shipped soon.',
+          })
+          .catch((error) => {
+            this.logger.warn(
+              `Failed to send payment confirmation email for ${order.orderId}: ${error.message}`,
+            );
+          });
       } else {
         const guestOrder = order as GuestOrderDocument;
-        await this.ordersEmailService.sendOrderConfirmationEmail(
-          guestOrder.customerInfo.email,
-          guestOrder.orderId,
-          {
-            totalAmount: guestOrder.totalAmount,
-            itemCount: guestOrder.items.length,
-            customerName: `${guestOrder.customerInfo.firstName} ${guestOrder.customerInfo.lastName}`,
-          },
+        const emailData = this.ordersEmailService.prepareOrderConfirmationData(
+          order,
+          guestOrder.customerInfo,
         );
+
+        // Override the default message to indicate payment is confirmed
+        this.ordersEmailService
+          .sendOrderConfirmationEmail(
+            guestOrder.customerInfo.email,
+            guestOrder.orderId,
+            {
+              ...emailData,
+              specialInstructions:
+                '✓ Payment Confirmed: Your order is now being processed and will be shipped soon.',
+            },
+          )
+          .catch((error) => {
+            this.logger.warn(
+              `Failed to send payment confirmation email for ${guestOrder.orderId}: ${error.message}`,
+            );
+          });
       }
-    } catch {
-      // Ignore email error
+    } catch (error) {
+      this.logger.warn(
+        `Failed to prepare payment confirmation email for ${order.orderId}: ${error.message}`,
+      );
     }
 
     return order;
@@ -1309,14 +1354,24 @@ export class OrdersService {
 
       const updatedOrder = await orderDoc.save({ session });
 
-      // Send email notification (non-blocking)
-      this.sendStatusUpdateEmailToUser(
-        orderDoc.userId.toString(),
-        order.orderId,
-        previousStatus,
-        status,
-        adminMessage,
-      );
+      // Send email notification only for major status changes (non-blocking)
+      const majorStatuses = [
+        OrderStatus.PAID,
+        OrderStatus.SHIPPED,
+        OrderStatus.DELIVERED,
+        OrderStatus.CANCELLED,
+        OrderStatus.REFUNDED,
+      ];
+
+      if (majorStatuses.includes(status)) {
+        this.sendStatusUpdateEmailToUser(
+          orderDoc.userId.toString(),
+          order.orderId,
+          previousStatus,
+          status,
+          adminMessage,
+        );
+      }
 
       return updatedOrder;
     });
@@ -1366,13 +1421,23 @@ export class OrdersService {
 
       const updatedOrder = await orderDoc.save({ session });
 
-      // Send email notification (non-blocking)
-      this.sendStatusUpdateEmailToGuest(
-        orderDoc,
-        previousStatus,
-        status,
-        adminMessage,
-      );
+      // Send email notification only for major status changes (non-blocking)
+      const majorStatuses = [
+        OrderStatus.PAID,
+        OrderStatus.SHIPPED,
+        OrderStatus.DELIVERED,
+        OrderStatus.CANCELLED,
+        OrderStatus.REFUNDED,
+      ];
+
+      if (majorStatuses.includes(status)) {
+        this.sendStatusUpdateEmailToGuest(
+          orderDoc,
+          previousStatus,
+          status,
+          adminMessage,
+        );
+      }
 
       return updatedOrder;
     });
@@ -1396,7 +1461,6 @@ export class OrdersService {
           previousStatus,
           newStatus,
           adminMessage,
-          orderTrackingUrl: `${process.env.FRONTEND_URL}/orders/${orderId}`,
         },
       );
     } catch (error) {
@@ -1422,8 +1486,6 @@ export class OrdersService {
           previousStatus,
           newStatus,
           adminMessage,
-          totalAmount: guestOrder.totalAmount,
-          orderTrackingUrl: `${process.env.FRONTEND_URL}/track-order?orderId=${guestOrder.orderId}&email=${guestOrder.customerInfo.email}`,
         },
       );
     } catch (error) {
@@ -1457,13 +1519,11 @@ export class OrdersService {
           customerName: `${user.firstName} ${user.lastName}`,
           previousStatus: isShipped ? 'processing' : 'in_transit',
           newStatus: status,
-          shipmentLabel,
           trackingNumber: fulfillment.trackingNumber,
           trackingUrl: fulfillment.trackingUrl,
           carrier: fulfillment.carrier,
-          estimatedDeliveryDate: fulfillment.estimatedDeliveryDate,
-          isFulfillmentUpdate: true,
-          orderTrackingUrl: `${process.env.FRONTEND_URL}/orders/${orderId}`,
+          estimatedDelivery: fulfillment.estimatedDeliveryDate,
+          fulfillmentLabel: shipmentLabel,
         },
       );
     } catch (error) {
@@ -1495,13 +1555,11 @@ export class OrdersService {
           customerName: `${guestOrder.customerInfo.firstName} ${guestOrder.customerInfo.lastName}`,
           previousStatus: isShipped ? 'processing' : 'in_transit',
           newStatus: status,
-          shipmentLabel,
           trackingNumber: fulfillment.trackingNumber,
           trackingUrl: fulfillment.trackingUrl,
           carrier: fulfillment.carrier,
-          estimatedDeliveryDate: fulfillment.estimatedDeliveryDate,
-          isFulfillmentUpdate: true,
-          orderTrackingUrl: `${process.env.FRONTEND_URL}/track-order?orderId=${guestOrder.orderId}&email=${guestOrder.customerInfo.email}`,
+          estimatedDelivery: fulfillment.estimatedDeliveryDate,
+          fulfillmentLabel: shipmentLabel,
         },
       );
     } catch (error) {
@@ -1715,11 +1773,15 @@ export class OrdersService {
 
       await order.save();
 
-      // Send email for shipped/delivered (non-blocking)
-      if (
-        status === FulfillmentStatus.IN_TRANSIT ||
-        status === FulfillmentStatus.DELIVERED
-      ) {
+      // Send email for major fulfillment status changes (non-blocking)
+      const majorFulfillmentStatuses = [
+        FulfillmentStatus.IN_TRANSIT,
+        FulfillmentStatus.DELIVERED,
+        FulfillmentStatus.READY_FOR_PICKUP,
+        FulfillmentStatus.CANCELLED,
+      ];
+
+      if (majorFulfillmentStatuses.includes(status)) {
         this.sendFulfillmentStatusEmailToUser(
           order.userId.toString(),
           orderId,
@@ -1778,11 +1840,15 @@ export class OrdersService {
 
       await guestOrder.save();
 
-      // Send email for shipped/delivered (non-blocking)
-      if (
-        status === FulfillmentStatus.IN_TRANSIT ||
-        status === FulfillmentStatus.DELIVERED
-      ) {
+      // Send email for major fulfillment status changes (non-blocking)
+      const majorFulfillmentStatuses = [
+        FulfillmentStatus.IN_TRANSIT,
+        FulfillmentStatus.DELIVERED,
+        FulfillmentStatus.READY_FOR_PICKUP,
+        FulfillmentStatus.CANCELLED,
+      ];
+
+      if (majorFulfillmentStatuses.includes(status)) {
         this.sendFulfillmentStatusEmailToGuest(
           guestOrder,
           fulfillmentIndex,

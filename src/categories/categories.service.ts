@@ -525,11 +525,12 @@ export class CategoriesService {
     const parents: CategoryWithChildren[] = parentCategories.map((parent) => {
       const parentIdStr = (parent as any)._id.toString();
       const subs = subcategoriesMap.get(parentIdStr) || [];
-      
+
       // Use appropriate count based on category type
-      const parentCount = parent.type === CategoryType.ADVERT
-        ? advertCountMap.get(parentIdStr) || 0
-        : productCountMap.get(parentIdStr) || 0;
+      const parentCount =
+        parent.type === CategoryType.ADVERT
+          ? advertCountMap.get(parentIdStr) || 0
+          : productCountMap.get(parentIdStr) || 0;
 
       return {
         _id: parentIdStr,
@@ -543,9 +544,10 @@ export class CategoriesService {
         subcategories: subs.map((sub) => {
           const subIdStr = (sub as any)._id.toString();
           // Use appropriate count based on subcategory type
-          const subCount = sub.type === CategoryType.ADVERT
-            ? advertCountMap.get(subIdStr) || 0
-            : productCountMap.get(subIdStr) || 0;
+          const subCount =
+            sub.type === CategoryType.ADVERT
+              ? advertCountMap.get(subIdStr) || 0
+              : productCountMap.get(subIdStr) || 0;
 
           return {
             _id: subIdStr,
@@ -570,11 +572,12 @@ export class CategoriesService {
   async findByIdWithSubcategories(id: string): Promise<CategoryWithChildren> {
     const category = await this.findById(id);
     const subcategories = await this.findSubcategories(id);
-    
+
     // Use appropriate count based on category type
-    const productCount = category.type === CategoryType.ADVERT
-      ? await this.getAdvertCount(id)
-      : await this.getProductCount(id);
+    const productCount =
+      category.type === CategoryType.ADVERT
+        ? await this.getAdvertCount(id)
+        : await this.getProductCount(id);
 
     return {
       _id: (category as any)._id.toString(),
@@ -589,9 +592,10 @@ export class CategoriesService {
         subcategories.map(async (sub) => {
           const subIdStr = (sub as any)._id.toString();
           // Use appropriate count based on subcategory type
-          const subCount = sub.type === CategoryType.ADVERT
-            ? await this.getAdvertCount(subIdStr)
-            : await this.getProductCount(subIdStr);
+          const subCount =
+            sub.type === CategoryType.ADVERT
+              ? await this.getAdvertCount(subIdStr)
+              : await this.getProductCount(subIdStr);
 
           return {
             _id: subIdStr,

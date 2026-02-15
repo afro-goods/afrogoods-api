@@ -2,7 +2,11 @@
 
 <p>{{#if customerName}}Hello {{customerName}},{{else}}Hello,{{/if}}</p>
 
+{{#if fulfillmentLabel}}
+<p>Great news! {{fulfillmentLabel}} status has been updated.</p>
+{{else}}
 <p>Great news! Your order status has been updated.</p>
+{{/if}}
 
 <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
   <table style="width: 100%; border-collapse: collapse;">
@@ -10,6 +14,16 @@
       <td style="padding: 5px 0;"><strong>Order Number:</strong></td>
       <td style="padding: 5px 0; text-align: right;">{{orderId}}</td>
     </tr>
+    {{#if fulfillmentLabel}}
+    <tr>
+      <td style="padding: 5px 0;"><strong>Shipment:</strong></td>
+      <td style="padding: 5px 0; text-align: right;">
+        <span style="padding: 3px 10px; background-color: #007bff; color: white; border-radius: 3px; font-size: 14px; font-weight: bold;">
+          {{fulfillmentLabel}}
+        </span>
+      </td>
+    </tr>
+    {{/if}}
     <tr>
       <td style="padding: 5px 0;"><strong>Previous Status:</strong></td>
       <td style="padding: 5px 0; text-align: right;">
@@ -54,7 +68,9 @@
   <div style="text-align: center; margin: 20px 0;">
     <p><strong>Tracking Number:</strong> {{trackingNumber}}</p>
     {{#if carrier}}<p style="color: #6c757d; font-size: 14px;">Carrier: {{carrier}}</p>{{/if}}
+    {{#if trackingUrl}}
     <a href="{{trackingUrl}}" class="button">Track Your Package</a>
+    {{/if}}
   </div>
   {{/if}}
 {{/if}}

@@ -84,7 +84,9 @@ export class EmailService {
   async sendPasswordResetEmail(
     dto: SendPasswordResetEmailDto,
   ): Promise<EmailResult> {
-    const resetUrl = `${process.env.APP_URL || 'https://afrogoods.com'}/reset-password?token=${dto.token}`;
+    // The token is already a complete Firebase password reset URL from generatePasswordResetLink()
+    // No need to construct a new URL - use it directly
+    const resetUrl = dto.token;
 
     return this.sendEmail(
       dto.email,
@@ -92,7 +94,9 @@ export class EmailService {
       'passwordreset',
       {
         name: dto.name,
+        email: dto.email,
         resetUrl,
+        expiryMinutes: dto.expiryMinutes || 60,
         appName: 'AfroGoods',
         appUrl: process.env.APP_URL || 'https://afrogoods.com',
       },
@@ -107,23 +111,35 @@ export class EmailService {
   async sendOrderConfirmationEmail(
     dto: SendOrderConfirmationEmailDto,
   ): Promise<EmailResult> {
-    return this.sendEmail(
-      dto.email,
-      `Order Confirmation - ${dto.orderId}`,
-      'orderconfirmation',
-      {
-        orderId: dto.orderId,
-        customerName: dto.orderDetails.customerName,
-        totalAmount: dto.orderDetails.totalAmount,
-        itemCount: dto.orderDetails.itemCount,
-        items: dto.orderDetails.items,
-        shippingCost: dto.orderDetails.shippingCost,
-        shippingAddress: dto.orderDetails.shippingAddress,
-        paymentMethod: dto.orderDetails.paymentMethod,
-        appName: 'AfroGoods',
-        appUrl: process.env.APP_URL || 'https://afrogoods.com',
-      },
-    );
+    // Check if this is a payment confirmation (special instructions contains "Payment Confirmed")
+    const isPaymentConfirmed =
+      dto.orderDetails.specialInstructions?.includes('Payment Confirmed');
+    const subject = isPaymentConfirmed
+      ? `Order Confirmation - Payment Confirmed - ${dto.orderId}`
+      : `Order Received - ${dto.orderId}`;
+
+    return this.sendEmail(dto.email, subject, 'orderconfirmation', {
+      orderId: dto.orderId,
+      customerName: dto.orderDetails.customerName,
+      orderDate: dto.orderDetails.orderDate || new Date(),
+      total: dto.orderDetails.total || dto.orderDetails.totalAmount,
+      currency: dto.orderDetails.currency || 'CAD',
+      itemCount: dto.orderDetails.itemCount,
+      items: dto.orderDetails.items,
+      subtotal: dto.orderDetails.subtotal || dto.orderDetails.totalAmount,
+      discount: dto.orderDetails.discount || 0,
+      discountCode: dto.orderDetails.discountCode,
+      shippingCost: dto.orderDetails.shippingCost,
+      tax: dto.orderDetails.tax || 0,
+      shippingAddress: dto.orderDetails.shippingAddress,
+      paymentMethod: dto.orderDetails.paymentMethod,
+      paymentDetails: dto.orderDetails.paymentDetails,
+      estimatedDelivery:
+        dto.orderDetails.estimatedDelivery || '5-7 business days',
+      specialInstructions: dto.orderDetails.specialInstructions,
+      appName: 'AfroGoods',
+      appUrl: process.env.APP_URL || 'https://afrogoods.com',
+    });
   }
 
   /**
@@ -143,6 +159,15 @@ export class EmailService {
         customerName: dto.statusData.customerName,
         previousStatus: dto.statusData.previousStatus,
         newStatus: dto.statusData.newStatus,
+        updateDate: dto.statusData.updateDate || new Date(),
+        estimatedDelivery: dto.statusData.estimatedDelivery,
+        trackingNumber: dto.statusData.trackingNumber,
+        carrier: dto.statusData.carrier,
+        trackingUrl: dto.statusData.trackingUrl,
+        deliveryDate: dto.statusData.deliveryDate,
+        refundInfo: dto.statusData.refundInfo,
+        adminMessage: dto.statusData.adminMessage,
+        fulfillmentLabel: dto.statusData.fulfillmentLabel,
         appName: 'AfroGoods',
         appUrl: process.env.APP_URL || 'https://afrogoods.com',
       },

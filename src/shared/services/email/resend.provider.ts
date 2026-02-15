@@ -40,13 +40,20 @@ export class ResendProvider {
     }
 
     try {
-      await this.resend.emails.send({
+      // Add 10 second timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Email send timeout')), 10000),
+      );
+
+      const sendPromise = this.resend.emails.send({
         from: this.from,
         to,
         subject,
         html,
         text,
       });
+
+      await Promise.race([sendPromise, timeoutPromise]);
       this.logger.log(`Email sent to ${to}: ${subject}`);
     } catch (error) {
       this.logger.error(

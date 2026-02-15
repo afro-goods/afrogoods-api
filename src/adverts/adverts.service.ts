@@ -283,19 +283,32 @@ export class AdvertsService {
       filter.status = AdvertStatus.APPROVED;
     }
 
+    // Optimize populate - only fetch essential fields for list view
+    const populate = [
+      {
+        path: 'owner',
+        select: 'firstName lastName email', // Removed phoneNumber and photoUrl for list view
+      },
+      { 
+        path: 'category', 
+        select: 'name' // Only name needed for list view
+      },
+    ];
+
+    // Only populate reviewedBy for admin queries where it might be needed
+    if (isAdminQuery) {
+      populate.push({ 
+        path: 'reviewedBy', 
+        select: 'firstName lastName' 
+      });
+    }
+
     return this.paginationService.paginate(this.advertModel, {
       page: query.page,
       limit: query.limit,
       filter,
       sort: { createdAt: -1 },
-      populate: [
-        {
-          path: 'owner',
-          select: 'firstName lastName email phoneNumber photoUrl',
-        },
-        { path: 'category', select: 'name description' },
-        { path: 'reviewedBy', select: 'firstName lastName' },
-      ],
+      populate,
     });
   }
 
@@ -401,22 +414,20 @@ export class AdvertsService {
       throw new NotFoundException('Advert not found or not owned by you');
     }
 
-    // Check if advert is APPROVED and currently active
-    if (
-      advert.status === AdvertStatus.APPROVED &&
-      this.isAdvertCurrentlyActive(advert)
-    ) {
-      throw new BadRequestException(
-        'Cannot delete an active approved advert. Please wait until the campaign ends.',
-      );
+    // Allow deletion of adverts in any status
+    const res = await this.advertModel.deleteOne({ _id: id }).exec();
+
+    return { deleted: res.deletedCount > 0 };
+  }
+
+  /** Delete advert (admin can delete any advert) */
+  async adminRemove(id: string): Promise<{ deleted: boolean }> {
+    const advert = await this.advertModel.findById(id);
+
+    if (!advert) {
+      throw new NotFoundException('Advert not found');
     }
 
-    // Allow deletion for:
-    // - PENDING adverts
-    // - REJECTED adverts
-    // - APPROVED adverts that haven't started yet (startDate in future)
-    // - APPROVED adverts that have ended (endDate in past)
-    // - EXPIRED adverts
     const res = await this.advertModel.deleteOne({ _id: id }).exec();
 
     return { deleted: res.deletedCount > 0 };

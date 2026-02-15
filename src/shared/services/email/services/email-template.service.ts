@@ -100,8 +100,12 @@ export class EmailTemplateService {
 
     // Date formatting helper
     Handlebars.registerHelper('formatDate', (date: string | Date) => {
+      if (!date) return '';
       try {
         const dateObj = typeof date === 'string' ? new Date(date) : date;
+        // Check if date is valid
+        if (isNaN(dateObj.getTime())) return date.toString();
+
         return dateObj.toLocaleDateString('en-US', {
           year: 'numeric',
           month: 'long',
@@ -109,14 +113,18 @@ export class EmailTemplateService {
         });
       } catch (error) {
         this.logger.error(`Failed to format date: ${error.message}`);
-        return date;
+        return date?.toString() || '';
       }
     });
 
     // Time formatting helper
     Handlebars.registerHelper('formatTime', (date: string | Date) => {
+      if (!date) return '';
       try {
         const dateObj = typeof date === 'string' ? new Date(date) : date;
+        // Check if date is valid
+        if (isNaN(dateObj.getTime())) return date.toString();
+
         return dateObj.toLocaleTimeString('en-US', {
           hour: '2-digit',
           minute: '2-digit',
@@ -124,7 +132,7 @@ export class EmailTemplateService {
         });
       } catch (error) {
         this.logger.error(`Failed to format time: ${error.message}`);
-        return date;
+        return date?.toString() || '';
       }
     });
 
@@ -136,6 +144,12 @@ export class EmailTemplateService {
     // Equality check helper
     Handlebars.registerHelper('eq', (a: any, b: any) => {
       return a === b;
+    });
+
+    // Contains helper - checks if a string contains a substring
+    Handlebars.registerHelper('contains', (str: string, substring: string) => {
+      if (!str || !substring) return false;
+      return str.includes(substring);
     });
   }
 

@@ -83,6 +83,13 @@ export class AdvertsController {
     return this.advertsService.review(id, dto, admin._id.toString());
   }
 
+  @Delete('admin/:id')
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async adminRemove(@Param('id') id: string) {
+    return this.advertsService.adminRemove(id);
+  }
+
   /** ---------------- Public Endpoints (with param) ---------------- */
 
   @Get(':id')

@@ -8,6 +8,7 @@ const origins: Record<string, string[]> = {
   production: [''],
   development: [
     'http://192.168.0.198:5173',
+    'http://192.168.0.198:5174',
     'http://192.168.18.2:5173',
     'http://192.168.18.2:5174',
     'http://localhost:5173',

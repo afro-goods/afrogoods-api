@@ -18,7 +18,7 @@ export class OrdersEmailService {
   async sendOrderConfirmationEmail(
     email: string,
     orderId: string,
-    orderDetails: Record<string, any>,
+    orderDetails: SendOrderConfirmationEmailDto['orderDetails'],
   ): Promise<void> {
     this.logger.log(
       `Sending order confirmation email for ${email}, order: ${orderId}`,
@@ -41,12 +41,49 @@ export class OrdersEmailService {
   }
 
   /**
+   * Prepare order data for confirmation email from order and customer info
+   */
+  prepareOrderConfirmationData(
+    order: any,
+    customerInfo: any,
+  ): SendOrderConfirmationEmailDto['orderDetails'] {
+    return {
+      totalAmount: order.totalAmount,
+      itemCount: order.items.length,
+      customerName: `${customerInfo.firstName} ${customerInfo.lastName}`,
+      orderDate: order.createdAt || new Date(),
+      currency: 'CAD',
+      items: order.items.map((item: any) => ({
+        name: item.productId?.name || 'Product',
+        quantity: item.quantity,
+        price: item.priceAtPurchase,
+      })),
+      subtotal: order.totalAmount,
+      shippingCost: 0,
+      tax: 0,
+      discount: 0,
+      shippingAddress: {
+        name: `${customerInfo.firstName} ${customerInfo.lastName}`,
+        street:
+          order.shippingAddress?.street ||
+          order.shippingAddress?.streetAddress ||
+          '',
+        city: order.shippingAddress?.city || '',
+        state: order.shippingAddress?.state || '',
+        zipCode: order.shippingAddress?.postalCode || '',
+        country: order.shippingAddress?.country || 'Canada',
+      },
+      paymentMethod: 'E-Transfer',
+    };
+  }
+
+  /**
    * Send order status update email
    */
   async sendOrderStatusUpdateEmail(
     email: string,
     orderId: string,
-    statusData: Record<string, any>,
+    statusData: SendOrderStatusUpdateEmailDto['statusData'],
   ): Promise<void> {
     this.logger.log(
       `Sending status update email for ${email}, order: ${orderId}`,

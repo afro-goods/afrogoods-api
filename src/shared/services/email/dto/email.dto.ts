@@ -44,11 +44,14 @@ export class SendPasswordResetEmailDto {
 
   @IsString()
   @IsNotEmpty()
-  token: string;
+  token: string; // This is a complete Firebase password reset URL from generatePasswordResetLink()
 
   @IsString()
   @IsNotEmpty()
   name: string;
+
+  @IsOptional()
+  expiryMinutes?: number;
 }
 
 // Verification email DTO
@@ -78,7 +81,38 @@ export class SendOrderConfirmationEmailDto {
 
   @IsObject()
   @IsNotEmpty()
-  orderDetails: Record<string, any>;
+  orderDetails: {
+    customerName: string;
+    totalAmount: number;
+    itemCount: number;
+    items: Array<{
+      name: string;
+      quantity: number;
+      price: number;
+      variant?: string;
+    }>;
+    shippingCost: number;
+    shippingAddress: {
+      name: string;
+      street: string;
+      city: string;
+      state: string;
+      zipCode: string;
+      country: string;
+      phone?: string;
+    };
+    paymentMethod: string;
+    orderDate?: Date;
+    currency?: string;
+    subtotal?: number;
+    discount?: number;
+    discountCode?: string;
+    tax?: number;
+    total?: number;
+    estimatedDelivery?: string;
+    paymentDetails?: string;
+    specialInstructions?: string;
+  };
 }
 
 // Order status update email DTO
@@ -93,7 +127,20 @@ export class SendOrderStatusUpdateEmailDto {
 
   @IsObject()
   @IsNotEmpty()
-  statusData: Record<string, any>;
+  statusData: {
+    customerName: string;
+    previousStatus: string;
+    newStatus: string;
+    updateDate?: Date;
+    estimatedDelivery?: string;
+    trackingNumber?: string;
+    carrier?: string;
+    trackingUrl?: string;
+    deliveryDate?: Date;
+    refundInfo?: string;
+    adminMessage?: string;
+    fulfillmentLabel?: string; // e.g., "Shipment 1 of 2" or "Your order"
+  };
 }
 
 // Admin communication email DTO

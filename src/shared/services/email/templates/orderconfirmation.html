@@ -1,8 +1,34 @@
-<h2>Order Confirmation ✓</h2>
+<h2>Order Received ✓</h2>
 
 <p>{{#if customerName}}Hello {{customerName}},{{else}}Hello,{{/if}}</p>
 
-<p>Thank you for your order! We've received it and are getting it ready for shipment.</p>
+{{#if specialInstructions}}
+  {{#if (contains specialInstructions "Payment Confirmed")}}
+    <p>Great news! Your payment has been confirmed and your order is now being processed.</p>
+    
+    <div style="background-color: #d4edda; padding: 15px; border-left: 4px solid #28a745; border-radius: 3px; margin: 20px 0;">
+      <p style="margin: 0; color: #155724;">
+        <strong>✓ Payment Confirmed:</strong> Your order is now being processed and will be shipped soon.
+      </p>
+    </div>
+  {{else}}
+    <p>Thank you for your order! We've received it and it's pending payment confirmation.</p>
+    
+    <div style="background-color: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; border-radius: 3px; margin: 20px 0;">
+      <p style="margin: 0; color: #856404;">
+        <strong>⏳ Pending Confirmation:</strong> Your order will be processed once we confirm your payment. You'll receive another email when your payment is confirmed.
+      </p>
+    </div>
+  {{/if}}
+{{else}}
+  <p>Thank you for your order! We've received it and it's pending payment confirmation.</p>
+  
+  <div style="background-color: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; border-radius: 3px; margin: 20px 0;">
+    <p style="margin: 0; color: #856404;">
+      <strong>⏳ Pending Confirmation:</strong> Your order will be processed once we confirm your payment. You'll receive another email when your payment is confirmed.
+    </p>
+  </div>
+{{/if}}
 
 <div style="background-color: #d4edda; padding: 20px; border-left: 4px solid #28a745; border-radius: 3px; margin: 20px 0;">
   <h3 style="margin-top: 0; color: #155724;">Order Details</h3>

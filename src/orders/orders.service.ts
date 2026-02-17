@@ -1157,6 +1157,11 @@ export class OrdersService {
             },
             false,
           )
+          .sendOrderConfirmationEmail(user.email, order.orderId, {
+            ...emailData,
+            specialInstructions:
+              '✓ Payment Confirmed: Your order is now being processed and will be shipped soon.',
+          })
           .catch((error) => {
             this.logger.warn(
               `Failed to send payment confirmation email for ${order.orderId}: ${error.message}`,

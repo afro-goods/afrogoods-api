@@ -150,6 +150,8 @@ export class EmailService {
       trackOrderUrl,
       appName: 'AfroGoods',
       appUrl,
+      appName: 'AfroGoods',
+      appUrl: process.env.APP_URL || 'https://afrogoods.com',
     });
   }
 

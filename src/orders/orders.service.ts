@@ -362,6 +362,7 @@ export class OrdersService {
           user.email,
           order.orderId,
           emailData,
+          false,
         ),
         (async () => {
           const settings = await this.paymentSettingsService.getSettings();
@@ -648,6 +649,7 @@ export class OrdersService {
           email,
           guestOrder.orderId,
           emailData,
+          true,
         ),
         (async () => {
           const settings = await this.paymentSettingsService.getSettings();
@@ -1145,6 +1147,16 @@ export class OrdersService {
 
         // Override the default message to indicate payment is confirmed
         this.ordersEmailService
+          .sendOrderConfirmationEmail(
+            user.email,
+            order.orderId,
+            {
+              ...emailData,
+              specialInstructions:
+                '✓ Payment Confirmed: Your order is now being processed and will be shipped soon.',
+            },
+            false,
+          )
           .sendOrderConfirmationEmail(user.email, order.orderId, {
             ...emailData,
             specialInstructions:
@@ -1172,6 +1184,7 @@ export class OrdersService {
               specialInstructions:
                 '✓ Payment Confirmed: Your order is now being processed and will be shipped soon.',
             },
+            true,
           )
           .catch((error) => {
             this.logger.warn(

@@ -14,11 +14,13 @@ export class OrdersEmailService {
 
   /**
    * Send order confirmation email
+   * @param isGuestOrder - When true, email links use /track-order?orderId=...&email=... for guest checkout
    */
   async sendOrderConfirmationEmail(
     email: string,
     orderId: string,
     orderDetails: SendOrderConfirmationEmailDto['orderDetails'],
+    isGuestOrder = false,
   ): Promise<void> {
     this.logger.log(
       `Sending order confirmation email for ${email}, order: ${orderId}`,
@@ -28,6 +30,7 @@ export class OrdersEmailService {
       email,
       orderId,
       orderDetails,
+      isGuestOrder,
     };
 
     try {
@@ -72,6 +75,10 @@ export class OrdersEmailService {
         state: order.shippingAddress?.state || '',
         zipCode: order.shippingAddress?.postalCode || '',
         country: order.shippingAddress?.country || 'Canada',
+        phone:
+          order.shippingAddress?.phone ||
+          customerInfo.phone ||
+          customerInfo.phoneNumber,
       },
       paymentMethod: 'E-Transfer',
     };

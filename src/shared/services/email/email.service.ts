@@ -118,6 +118,15 @@ export class EmailService {
       ? `Order Confirmation - Payment Confirmed - ${dto.orderId}`
       : `Order Received - ${dto.orderId}`;
 
+    const appUrl = process.env.APP_URL || 'https://afrogoods.com';
+    const isGuest = dto.isGuestOrder === true;
+    const viewOrderUrl = isGuest
+      ? `${appUrl}/track-order?orderId=${encodeURIComponent(dto.orderId)}&email=${encodeURIComponent(dto.email)}`
+      : `${appUrl}/orders/${dto.orderId}`;
+    const trackOrderUrl = isGuest
+      ? `${appUrl}/track-order?orderId=${encodeURIComponent(dto.orderId)}&email=${encodeURIComponent(dto.email)}`
+      : `${appUrl}/orders/${dto.orderId}/track`;
+
     return this.sendEmail(dto.email, subject, 'orderconfirmation', {
       orderId: dto.orderId,
       customerName: dto.orderDetails.customerName,
@@ -137,8 +146,10 @@ export class EmailService {
       estimatedDelivery:
         dto.orderDetails.estimatedDelivery || '5-7 business days',
       specialInstructions: dto.orderDetails.specialInstructions,
+      viewOrderUrl,
+      trackOrderUrl,
       appName: 'AfroGoods',
-      appUrl: process.env.APP_URL || 'https://afrogoods.com',
+      appUrl,
     });
   }
 

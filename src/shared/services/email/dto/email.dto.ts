@@ -4,6 +4,7 @@ import {
   IsNotEmpty,
   IsObject,
   IsOptional,
+  IsBoolean,
 } from 'class-validator';
 
 // Base email job DTO
@@ -78,6 +79,11 @@ export class SendOrderConfirmationEmailDto {
   @IsString()
   @IsNotEmpty()
   orderId: string;
+
+  /** When true, email links use /track-order?orderId=...&email=... for guest checkout */
+  @IsOptional()
+  @IsBoolean()
+  isGuestOrder?: boolean;
 
   @IsObject()
   @IsNotEmpty()

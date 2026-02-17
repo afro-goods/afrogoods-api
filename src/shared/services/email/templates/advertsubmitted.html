@@ -2,46 +2,83 @@
 
 <p>{{#if customerName}}Hello {{customerName}},{{else}}Hello,{{/if}}</p>
 
-<p>Thank you for submitting your advert to {{appName}}. We've received it and our team will review it shortly.</p>
+<p>
+  Thank you for submitting your advert to {{appName}}. We've received it and our
+  team will review it shortly.
+</p>
 
-<div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
-  <h3 style="margin-top: 0;">Advert Details</h3>
-  <table style="width: 100%; border-collapse: collapse;">
+<div
+  style="
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 5px;
+    margin: 20px 0;
+  "
+>
+  <h3 style="margin-top: 0">Advert Details</h3>
+  <table style="width: 100%; border-collapse: collapse">
     <tr>
-      <td style="padding: 5px 0;"><strong>Title:</strong></td>
-      <td style="padding: 5px 0; text-align: right;">{{advertTitle}}</td>
+      <td style="padding: 5px 0"><strong>Title:</strong></td>
+      <td style="padding: 5px 0; text-align: right">{{advertTitle}}</td>
     </tr>
     <tr>
-      <td style="padding: 5px 0;"><strong>Type:</strong></td>
-      <td style="padding: 5px 0; text-align: right;">{{advertType}}</td>
+      <td style="padding: 5px 0"><strong>Type:</strong></td>
+      <td style="padding: 5px 0; text-align: right">{{advertType}}</td>
     </tr>
     <tr>
-      <td style="padding: 5px 0;"><strong>Status:</strong></td>
-      <td style="padding: 5px 0; text-align: right;">
-        <span style="padding: 3px 10px; background-color: #fff3cd; color: #856404; border-radius: 3px; font-size: 14px;">
+      <td style="padding: 5px 0"><strong>Status:</strong></td>
+      <td style="padding: 5px 0; text-align: right">
+        <span
+          style="
+            padding: 3px 10px;
+            background-color: #fff3cd;
+            color: #856404;
+            border-radius: 3px;
+            font-size: 14px;
+          "
+        >
           Pending review
         </span>
       </td>
     </tr>
     <tr>
-      <td style="padding: 5px 0;"><strong>Submitted:</strong></td>
-      <td style="padding: 5px 0; text-align: right;">{{formatDate submittedAt}}</td>
+      <td style="padding: 5px 0"><strong>Submitted:</strong></td>
+      <td style="padding: 5px 0; text-align: right">
+        {{formatDate submittedAt}}
+      </td>
     </tr>
   </table>
 </div>
 
-<div style="background-color: #e7f3ff; padding: 15px; border-left: 4px solid #3498db; border-radius: 3px; margin: 20px 0;">
-  <h4 style="margin-top: 0;">What happens next?</h4>
-  <p style="margin: 0;">Our team will review your advert and you'll receive an email once it has been approved or if we need any changes. This usually takes 1–2 business days.</p>
+<div
+  style="
+    background-color: #e7f3ff;
+    padding: 15px;
+    border-left: 4px solid #3498db;
+    border-radius: 3px;
+    margin: 20px 0;
+  "
+>
+  <h4 style="margin-top: 0">What happens next?</h4>
+  <p style="margin: 0">
+    Our team will review your advert and you'll receive an email once it has
+    been approved or if we need any changes. This usually takes 1–2 business
+    days.
+  </p>
 </div>
 
 <div class="text-center">
   <a href="{{appUrl}}/adverts/me" class="button">View My Adverts</a>
 </div>
 
-<hr class="divider">
+<hr class="divider" />
 
-<p>If you have any questions about your submission, please contact our support team.</p>
+<p>
+  If you have any questions about your submission, please contact our support
+  team.
+</p>
 
-<p>Best regards,<br>
-<strong>The {{appName}} Team</strong></p>
+<p>
+  Best regards,<br />
+  <strong>The {{appName}} Team</strong>
+</p>

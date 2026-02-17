@@ -18,6 +18,10 @@ import {
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
+  private readonly APP_NAME = 'AfroGoods';
+  private readonly APP_URL = process.env.APP_URL || 'https://afrogoods.com';
+  private readonly ADMIN_DASHBOARD_URL =
+    process.env.ADMIN_DASHBOARD_URL || 'https://admin.afrogoods.com';
 
   constructor(
     private readonly resendProvider: ResendProvider,
@@ -71,8 +75,8 @@ export class EmailService {
   async sendWelcomeEmail(dto: SendWelcomeEmailDto): Promise<EmailResult> {
     return this.sendEmail(dto.email, 'Welcome to AfroGoods!', 'welcomeemail', {
       name: dto.name,
-      appName: 'AfroGoods',
-      appUrl: process.env.APP_URL || 'https://afrogoods.com',
+      appName: this.APP_NAME,
+      appUrl: this.APP_URL,
     });
   }
 
@@ -97,8 +101,8 @@ export class EmailService {
         email: dto.email,
         resetUrl,
         expiryMinutes: dto.expiryMinutes || 60,
-        appName: 'AfroGoods',
-        appUrl: process.env.APP_URL || 'https://afrogoods.com',
+        appName: this.APP_NAME,
+        appUrl: this.APP_URL,
       },
     );
   }
@@ -118,14 +122,13 @@ export class EmailService {
       ? `Order Confirmation - Payment Confirmed - ${dto.orderId}`
       : `Order Received - ${dto.orderId}`;
 
-    const appUrl = process.env.APP_URL || 'https://afrogoods.com';
     const isGuest = dto.isGuestOrder === true;
     const viewOrderUrl = isGuest
-      ? `${appUrl}/track-order?orderId=${encodeURIComponent(dto.orderId)}&email=${encodeURIComponent(dto.email)}`
-      : `${appUrl}/orders/${dto.orderId}`;
+      ? `${this.APP_URL}/track-order?orderId=${encodeURIComponent(dto.orderId)}&email=${encodeURIComponent(dto.email)}`
+      : `${this.APP_URL}/orders/${dto.orderId}`;
     const trackOrderUrl = isGuest
-      ? `${appUrl}/track-order?orderId=${encodeURIComponent(dto.orderId)}&email=${encodeURIComponent(dto.email)}`
-      : `${appUrl}/orders/${dto.orderId}/track`;
+      ? `${this.APP_URL}/track-order?orderId=${encodeURIComponent(dto.orderId)}&email=${encodeURIComponent(dto.email)}`
+      : `${this.APP_URL}/orders/${dto.orderId}/track`;
 
     return this.sendEmail(dto.email, subject, 'orderconfirmation', {
       orderId: dto.orderId,
@@ -148,10 +151,8 @@ export class EmailService {
       specialInstructions: dto.orderDetails.specialInstructions,
       viewOrderUrl,
       trackOrderUrl,
-      appName: 'AfroGoods',
-      appUrl,
-      appName: 'AfroGoods',
-      appUrl: process.env.APP_URL || 'https://afrogoods.com',
+      appName: this.APP_NAME,
+      appUrl: this.APP_URL,
     });
   }
 
@@ -181,8 +182,8 @@ export class EmailService {
         refundInfo: dto.statusData.refundInfo,
         adminMessage: dto.statusData.adminMessage,
         fulfillmentLabel: dto.statusData.fulfillmentLabel,
-        appName: 'AfroGoods',
-        appUrl: process.env.APP_URL || 'https://afrogoods.com',
+        appName: this.APP_NAME,
+        appUrl: this.APP_URL,
       },
     );
   }
@@ -209,8 +210,8 @@ export class EmailService {
         refundMethod:
           dto.cancellationData.refundMethod || 'Original payment method',
         refundTimeline: dto.cancellationData.refundTimeline,
-        appName: 'AfroGoods',
-        appUrl: process.env.APP_URL || 'https://afrogoods.com',
+        appName: this.APP_NAME,
+        appUrl: this.APP_URL,
       },
     );
   }
@@ -232,10 +233,9 @@ export class EmailService {
         totalAmount: params.totalAmount,
         customerName: params.customerName,
         customerEmail: params.customerEmail,
-        appName: 'AfroGoods',
-        appUrl: process.env.APP_URL || 'https://afrogoods.com',
-        adminDashboardUrl:
-          process.env.ADMIN_DASHBOARD_URL || 'https://admin.afrogoods.com',
+        appName: this.APP_NAME,
+        appUrl: this.APP_URL,
+        adminDashboardUrl: this.ADMIN_DASHBOARD_URL,
       },
     );
   }
@@ -258,8 +258,8 @@ export class EmailService {
         advertTitle: dto.advertTitle,
         advertType: dto.advertType,
         submittedAt: new Date(),
-        appName: 'AfroGoods',
-        appUrl: process.env.APP_URL || 'https://afrogoods.com',
+        appName: this.APP_NAME,
+        appUrl: this.APP_URL,
       },
     );
   }
@@ -284,8 +284,8 @@ export class EmailService {
       status: dto.status,
       rejectionReason: dto.rejectionReason,
       reviewedAt: new Date(),
-      appName: 'AfroGoods',
-      appUrl: process.env.APP_URL || 'https://afrogoods.com',
+      appName: this.APP_NAME,
+      appUrl: this.APP_URL,
     });
   }
 }

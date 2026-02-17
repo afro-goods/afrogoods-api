@@ -29,6 +29,9 @@ export class GuestAddress {
   @Prop({ type: String, required: true })
   street: string;
 
+  @Prop({ type: String })
+  apartment?: string;
+
   @Prop({ type: String, required: true })
   city: string;
 
@@ -40,6 +43,9 @@ export class GuestAddress {
 
   @Prop({ type: String, required: true })
   country: string;
+
+  @Prop({ type: String })
+  instructions?: string;
 }
 
 export const GuestAddressSchema = SchemaFactory.createForClass(GuestAddress);

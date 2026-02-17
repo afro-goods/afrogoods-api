@@ -35,6 +35,10 @@ export class AddressDto {
   @IsNotEmpty()
   street: string;
 
+  @IsOptional()
+  @IsString()
+  apartment?: string;
+
   @IsString()
   @IsNotEmpty()
   city: string;
@@ -50,6 +54,10 @@ export class AddressDto {
   @IsString()
   @IsNotEmpty()
   country: string;
+
+  @IsOptional()
+  @IsString()
+  instructions?: string;
 }
 
 export class CartItemDto {

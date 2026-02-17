@@ -283,32 +283,19 @@ export class AdvertsService {
       filter.status = AdvertStatus.APPROVED;
     }
 
-    // Optimize populate - only fetch essential fields for list view
-    const populate = [
-      {
-        path: 'owner',
-        select: 'firstName lastName email', // Removed phoneNumber and photoUrl for list view
-      },
-      { 
-        path: 'category', 
-        select: 'name' // Only name needed for list view
-      },
-    ];
-
-    // Only populate reviewedBy for admin queries where it might be needed
-    if (isAdminQuery) {
-      populate.push({ 
-        path: 'reviewedBy', 
-        select: 'firstName lastName' 
-      });
-    }
-
     return this.paginationService.paginate(this.advertModel, {
       page: query.page,
       limit: query.limit,
       filter,
       sort: { createdAt: -1 },
-      populate,
+      populate: [
+        {
+          path: 'owner',
+          select: 'firstName lastName email phoneNumber photoUrl',
+        },
+        { path: 'category', select: 'name description' },
+        { path: 'reviewedBy', select: 'firstName lastName' },
+      ],
     });
   }
 

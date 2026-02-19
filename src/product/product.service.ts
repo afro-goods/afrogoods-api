@@ -41,6 +41,11 @@ export class ProductsService {
 
       if (dto.images && dto.images.length > 0) {
         const uploadPromises = dto.images.map(async (img) => {
+          // Handle both string URLs and FileInput objects
+          if (typeof img === 'string') {
+            return img;
+          }
+          
           const base64Data = cleanBase64(img.uri);
           if (!base64Data) return null;
 
@@ -258,25 +263,34 @@ export class ProductsService {
         if (images.length === 0) {
           imageUrlsToSave = [];
         } else {
-          const uploadPromises = images.map(async (img) => {
-            const base64Data = cleanBase64(img.uri);
-            if (!base64Data) return null;
+          // Process images: keep existing URLs and upload new ones
+          const processedImages = await Promise.all(
+            images.map(async (img) => {
+              // If it's a string (existing URL), keep it as-is
+              if (typeof img === 'string') {
+                return img;
+              }
+              
+              // If it's an object with uri (new upload), process it
+              if (typeof img === 'object' && img.uri) {
+                const base64Data = cleanBase64(img.uri);
+                if (!base64Data) return null;
 
-            const buffer = Buffer.from(base64Data, 'base64');
+                const buffer = Buffer.from(base64Data, 'base64');
 
-            const result = await this.mediaService.uploadFile(buffer, {
-              folder: 'products',
-              resourceType: 'image',
-            });
+                const result = await this.mediaService.uploadFile(buffer, {
+                  folder: 'products',
+                  resourceType: 'image',
+                });
 
-            return result.secure_url;
-          });
+                return result.secure_url;
+              }
+              
+              return null;
+            }),
+          );
 
-          const uploadedUrls = (await Promise.all(uploadPromises)).filter(
-            Boolean,
-          ) as string[];
-
-          imageUrlsToSave = uploadedUrls;
+          imageUrlsToSave = processedImages.filter(Boolean) as string[];
         }
       }
 

@@ -40,7 +40,7 @@ export class CreateProductDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(8)
-  images?: FileInput[];
+  images?: (FileInput | string)[];
 
   @IsOptional()
   @IsString()

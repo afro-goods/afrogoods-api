@@ -38,10 +38,10 @@ export class AdvertsService {
   ];
 
   /** Statuses that allow user deletion */
-  private readonly DELETABLE_STATUSES = [
-    AdvertStatus.PENDING,
-    AdvertStatus.REJECTED,
-  ];
+  // private readonly DELETABLE_STATUSES = [
+  //   AdvertStatus.PENDING,
+  //   AdvertStatus.REJECTED,
+  // ];
 
   constructor(
     @InjectModel(Advert.name) private advertModel: Model<AdvertDocument>,

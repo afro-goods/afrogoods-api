@@ -17,6 +17,15 @@ export class PaymentSettingsController {
     return this.paymentSettingsService.getSettings();
   }
 
+  @Get('delivery-fees')
+  async getDeliveryFees() {
+    const settings = await this.paymentSettingsService.getSettings();
+    return {
+      express: settings.expressDeliveryFee,
+      standard: settings.standardDeliveryFee,
+    };
+  }
+
   @Put()
   @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)

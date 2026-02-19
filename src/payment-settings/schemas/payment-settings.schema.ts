@@ -14,6 +14,13 @@ export class PaymentSettings extends Document {
 
   @Prop({ type: String, trim: true })
   paymentInstructions?: string;
+
+  // Delivery fee settings
+  @Prop({ type: Number, required: true, default: 15.00 })
+  expressDeliveryFee: number;
+
+  @Prop({ type: Number, required: true, default: 8.00 })
+  standardDeliveryFee: number;
 }
 
 export type PaymentSettingsDocument = PaymentSettings & Document;

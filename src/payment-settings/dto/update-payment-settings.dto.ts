@@ -22,4 +22,8 @@ export class UpdatePaymentSettingsDto {
   @Min(0)
   @IsOptional()
   standardDeliveryFee?: number;
+
+  @IsString()
+  @IsOptional()
+  currency?: string;
 }

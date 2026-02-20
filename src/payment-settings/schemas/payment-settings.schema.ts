@@ -21,6 +21,10 @@ export class PaymentSettings extends Document {
 
   @Prop({ type: Number, required: true, default: 8.00 })
   standardDeliveryFee: number;
+
+  // Currency setting
+  @Prop({ type: String, required: true, default: 'CAD', trim: true })
+  currency: string;
 }
 
 export type PaymentSettingsDocument = PaymentSettings & Document;

@@ -19,6 +19,7 @@ import { CategoriesModule } from './categories/categories.module';
 import { OrdersModule } from './orders/orders.module';
 import { AdvertsModule } from './adverts/adverts.module';
 import { PaymentSettingsModule } from './payment-settings/payment-settings.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 // import { PaymentModule } from './payments/payment.module';
 import { CartModule } from './cart/cart.module';
 
@@ -45,6 +46,8 @@ const FeatureModules = [
   ProductsModule,
   OrdersModule,
   AdvertsModule,
+  PaymentSettingsModule,
+  DashboardModule,
 ];
 
 @Module({

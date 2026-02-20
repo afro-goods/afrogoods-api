@@ -4,7 +4,7 @@ import { UpdatePaymentSettingsDto } from './dto/update-payment-settings.dto';
 import { FirebaseAuthGuard } from '../auth/guards/firebase-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '../users/interfaces/user.interface';
+import { UserRole } from '../users/enum/user.enum';
 
 @Controller('payment-settings')
 export class PaymentSettingsController {

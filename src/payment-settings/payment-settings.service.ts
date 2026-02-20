@@ -26,6 +26,7 @@ export class PaymentSettingsService {
         paymentInstructions: 'Please send e-transfer to the email above.',
         expressDeliveryFee: 15.00, // Default express delivery fee
         standardDeliveryFee: 8.00, // Default standard delivery fee
+        currency: 'CAD', // Default currency
       });
     }
     return settings;

@@ -1,6 +1,6 @@
 import { IsOptional, IsEnum, IsString } from 'class-validator';
 import { PaginationDto } from 'src/shared/services/pagination/dto/pagination.dto';
-import { UserRole } from '../interfaces/user.interface';
+import { UserRole } from '../enum/user.enum';
 
 export class GetUsersQueryDto extends PaginationDto {
   @IsOptional()

@@ -15,7 +15,7 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { FirebaseAuthGuard } from 'src/auth/guards/firebase-auth.guard';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { UserRole } from 'src/users/interfaces/user.interface';
+import { UserRole } from 'src/users/enum/user.enum';
 import { ProductQueryDto } from './dto/product-query.dto';
 
 @Controller('products')

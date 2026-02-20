@@ -16,7 +16,7 @@ import { FirebaseAuthGuard } from '../auth/guards/firebase-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '../users/interfaces/user.interface';
+import { UserRole } from '../users/enum/user.enum';
 import { GuestCheckoutDto } from './dto/guest-checkout.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { AdminOrderSearchDto } from './dto/admin-order-search.dto';

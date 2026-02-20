@@ -17,7 +17,7 @@ import { AdvertQueryDto } from './dto/advert-query.dto';
 import { FirebaseAuthGuard } from 'src/auth/guards/firebase-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
-import { UserRole } from 'src/users/interfaces/user.interface';
+import { UserRole } from 'src/users/enum/user.enum';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import { User } from 'src/users/schemas/user.schema';
 

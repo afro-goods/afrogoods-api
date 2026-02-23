@@ -33,13 +33,6 @@ export class ProductsController {
     return this.productsService.getFeaturedProducts(limit);
   }
 
-  @Get('all')
-  @UseGuards(FirebaseAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  getAllProductsIncludingArchived(@Query() query: ProductQueryDto) {
-    return this.productsService.findAllProductsIncludingArchived(query);
-  }
-
   @Get(':id')
   async getProduct(@Param('id') id: string) {
     return this.productsService.findProductById(id);

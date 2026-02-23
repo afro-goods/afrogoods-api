@@ -126,7 +126,7 @@ export class ProductsService {
     const { page, limit, search, category, sort } = query;
 
     const filter: any = {
-      availabilityStatus: { $in: ['Draft', 'Out of Stock', 'In Stock'] },
+      availabilityStatus: { $in: ['Draft', 'Out of Stock', 'In Stock', 'Archived'] },
     };
 
     if (search) {
@@ -166,41 +166,6 @@ export class ProductsService {
             : { createdAt: -1 },
       populate: [
         { path: 'category', select: 'name description isActive parentId' },
-        { path: 'attributes' },
-      ],
-    });
-
-    return result;
-  }
-
-  async findAllProductsIncludingArchived(query: ProductQueryDto) {
-    const { page, limit, search, category, sort } = query;
-
-    const filter: any = {};
-
-    if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-      ];
-    }
-
-    if (category) {
-      filter.category = category;
-    }
-
-    const result = await this.paginationService.paginate(this.productModel, {
-      page,
-      limit,
-      filter,
-      sort:
-        sort === 'price'
-          ? { price: 1 }
-          : sort === '-price'
-            ? { price: -1 }
-            : { createdAt: -1 },
-      populate: [
-        { path: 'category', select: 'name description isActive' },
         { path: 'attributes' },
       ],
     });
@@ -322,16 +287,20 @@ export class ProductsService {
         attributes: attributeIds,
       };
 
-      // Automatically update availabilityStatus based on stock if stock is provided
+      // Automatically update availabilityStatus based on stock
+      // BUT only for In Stock/Out of Stock products (not Draft or Archived)
       if (dto.stock !== undefined) {
-        if (dto.stock === 0) {
-          updateData.availabilityStatus = AvailabilityStatus.OUT_OF_STOCK;
-        } else if (
-          dto.stock > 0 &&
-          product.availabilityStatus === AvailabilityStatus.OUT_OF_STOCK
-        ) {
-          updateData.availabilityStatus = AvailabilityStatus.IN_STOCK;
+        const currentStatus = dto.availabilityStatus || product.availabilityStatus;
+        
+        // Only auto-manage status if it's currently In Stock or Out of Stock
+        if (currentStatus === AvailabilityStatus.IN_STOCK || currentStatus === AvailabilityStatus.OUT_OF_STOCK) {
+          if (dto.stock === 0) {
+            updateData.availabilityStatus = AvailabilityStatus.OUT_OF_STOCK;
+          } else if (dto.stock > 0) {
+            updateData.availabilityStatus = AvailabilityStatus.IN_STOCK;
+          }
         }
+        // If status is Draft or Archived, don't auto-change it based on stock
       }
 
       if (dto.category) {

@@ -25,6 +25,9 @@ export class PaymentSettings extends Document {
   // Currency setting
   @Prop({ type: String, required: true, default: 'CAD', trim: true })
   currency: string;
+
+  @Prop({ type: Number, required: true, default: 30, min: 1, max: 90 })
+  advertDurationDays: number;
 }
 
 export type PaymentSettingsDocument = PaymentSettings & Document;

@@ -18,6 +18,8 @@ interface EnvVars {
   CLOUDINARY_API_SECRET: string;
 
   FIREBASE_SERVICE_ACCOUNT_BASE64: string;
+  RECAPTCHA_SECRET_KEY?: string;
+  ENCRYPTION_KEY: string;
 }
 
 const schema = joi
@@ -42,6 +44,8 @@ const schema = joi
     CLOUDINARY_API_SECRET: joi.string().required(),
 
     FIREBASE_SERVICE_ACCOUNT_BASE64: joi.string().base64().required(),
+    RECAPTCHA_SECRET_KEY: joi.string().optional(),
+    ENCRYPTION_KEY: joi.string().length(32).required(),
   })
   .unknown(true);
 
@@ -83,5 +87,11 @@ export const config = {
   },
   firebase: {
     serviceAccountBase64: env.FIREBASE_SERVICE_ACCOUNT_BASE64,
+  },
+  recaptcha: {
+    secretKey: env.RECAPTCHA_SECRET_KEY,
+  },
+  encryption: {
+    key: env.ENCRYPTION_KEY,
   },
 };

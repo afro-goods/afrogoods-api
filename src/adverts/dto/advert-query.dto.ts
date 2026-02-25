@@ -23,4 +23,8 @@ export class AdvertQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   owner?: string;
+
+  @IsOptional()
+  @IsString()
+  location?: string;
 }

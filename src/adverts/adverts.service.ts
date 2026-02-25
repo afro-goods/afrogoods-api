@@ -17,6 +17,8 @@ import { CategoriesService } from '../categories/categories.service';
 import { CategoryType } from '../categories/enums/category-type.enum';
 import { AdvertStatus } from './enums/advert-status.enum';
 import { EmailService } from '../shared/services/email/email.service';
+import { CaptchaService } from '../shared/services/captcha/captcha.service';
+import { PaymentSettingsService } from '../payment-settings/payment-settings.service';
 
 @Injectable()
 export class AdvertsService {
@@ -25,11 +27,8 @@ export class AdvertsService {
   /** Maximum number of active (pending/approved) adverts per user */
   private readonly MAX_ACTIVE_ADVERTS = 2;
 
-  /** Minimum advert duration in days */
-  private readonly MIN_ADVERT_DURATION_DAYS = 1;
-
-  /** Maximum advert duration in days */
-  private readonly MAX_ADVERT_DURATION_DAYS = 30;
+  /** Default advert duration in days (fallback) */
+  private readonly DEFAULT_ADVERT_DURATION_DAYS = 30;
 
   /** Statuses that allow user updates */
   private readonly UPDATABLE_STATUSES = [
@@ -37,17 +36,13 @@ export class AdvertsService {
     AdvertStatus.REJECTED,
   ];
 
-  /** Statuses that allow user deletion */
-  // private readonly DELETABLE_STATUSES = [
-  //   AdvertStatus.PENDING,
-  //   AdvertStatus.REJECTED,
-  // ];
-
   constructor(
     @InjectModel(Advert.name) private advertModel: Model<AdvertDocument>,
     private readonly paginationService: PaginationService,
     private readonly categoriesService: CategoriesService,
     private readonly emailService: EmailService,
+    private readonly captchaService: CaptchaService,
+    private readonly paymentSettingsService: PaymentSettingsService,
   ) {}
 
   /**
@@ -67,83 +62,24 @@ export class AdvertsService {
     }
   }
 
-  /**
-   * Validates the duration between startDate and endDate
-   * @param startDate - The advert start date
-   * @param endDate - The advert end date
-   * @returns Validation result with error message if invalid
-   */
-  private validateDateDuration(
-    startDate: Date,
-    endDate: Date,
-  ): { isValid: boolean; error?: string } {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-
-    // Calculate duration in days
-    const durationMs = end.getTime() - start.getTime();
-    const durationDays = durationMs / (1000 * 60 * 60 * 24);
-
-    if (durationDays < this.MIN_ADVERT_DURATION_DAYS) {
-      return {
-        isValid: false,
-        error: `Advert duration must be at least ${this.MIN_ADVERT_DURATION_DAYS} day.`,
-      };
-    }
-
-    if (durationDays > this.MAX_ADVERT_DURATION_DAYS) {
-      return {
-        isValid: false,
-        error: `Advert duration cannot exceed ${this.MAX_ADVERT_DURATION_DAYS} days.`,
-      };
-    }
-
-    return { isValid: true };
-  }
-
-  /**
-   * Validates that the start date is today or in the future
-   * @param startDate - The advert start date
-   * @returns True if startDate is today or future, false if in the past
-   */
-  private isStartDateValid(startDate: Date): boolean {
-    const start = new Date(startDate);
-    const today = new Date();
-
-    // Set today to midnight for comparison
-    today.setHours(0, 0, 0, 0);
-
-    // Set start date to midnight for comparison
-    start.setHours(0, 0, 0, 0);
-
-    return start >= today;
-  }
-
-  /**
-   * Checks if an advert is currently active (current date is between startDate and endDate)
-   * @param advert - The advert document to check
-   * @returns True if the advert is currently active, false otherwise
-   */
-  private isAdvertCurrentlyActive(advert: AdvertDocument): boolean {
-    const now = new Date();
-    const start = new Date(advert.startDate);
-    const end = new Date(advert.endDate);
-
-    // Set all dates to midnight for consistent comparison
-    now.setHours(0, 0, 0, 0);
-    start.setHours(0, 0, 0, 0);
-    end.setHours(0, 0, 0, 0);
-
-    // Check if current date is between startDate and endDate (inclusive)
-    return now >= start && now <= end;
-  }
-
   /** Create advert (customer) */
   async create(
     createAdvertDto: CreateAdvertDto,
     ownerId: string,
+    remoteIp?: string,
   ): Promise<Advert> {
-    const { startDate, endDate, category } = createAdvertDto;
+    const { category, captchaToken } = createAdvertDto;
+
+    // Verify CAPTCHA
+    const isCaptchaValid = await this.captchaService.verify(
+      captchaToken,
+      remoteIp,
+    );
+    if (!isCaptchaValid) {
+      throw new BadRequestException(
+        'CAPTCHA verification failed. Please try again.',
+      );
+    }
 
     // Check active adverts limit
     const activeCount = await this.advertModel.countDocuments({
@@ -157,31 +93,20 @@ export class AdvertsService {
       );
     }
 
-    if (new Date(startDate) >= new Date(endDate)) {
-      throw new BadRequestException('startDate must be before endDate');
-    }
-
-    // Validate date duration (1-90 days)
-    const durationValidation = this.validateDateDuration(
-      new Date(startDate),
-      new Date(endDate),
-    );
-    if (!durationValidation.isValid) {
-      throw new BadRequestException(durationValidation.error);
-    }
-
-    // Validate start date is not in the past
-    if (!this.isStartDateValid(new Date(startDate))) {
-      throw new BadRequestException(
-        'Start date must be today or a future date.',
-      );
-    }
-
     // Validate that the category exists and is of type 'advert'
     await this.validateAdvertCategory(category);
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const {
+      startDate: _startDate,
+      endDate: _endDate,
+      captchaToken: _captchaToken,
+      category: _category,
+      ...advertData
+    } = createAdvertDto as any;
+
     const advert = new this.advertModel({
-      ...createAdvertDto,
+      ...advertData,
       category: new Types.ObjectId(category),
       owner: new Types.ObjectId(ownerId),
       status: AdvertStatus.PENDING,
@@ -206,10 +131,8 @@ export class AdvertsService {
         advertTitle: savedAdvert.title,
         advertType: savedAdvert.type,
       });
-    } catch (error) {
-      this.logger.error(
-        `Failed to send advert submission email: ${error.message}`,
-      );
+    } catch {
+      this.logger.error(`Failed to send advert submission email`);
       // Don't throw - email failure shouldn't block advert creation
     }
 
@@ -230,6 +153,39 @@ export class AdvertsService {
       throw new BadRequestException(
         'Rejection reason is required when rejecting an advert',
       );
+    }
+
+    // Check if approving after start date or end date has passed
+    if (dto.status === AdvertStatus.APPROVED) {
+      const now = new Date();
+
+      // For new adverts (without startDate/endDate), we calculate them now
+      if (!advert.startDate || !advert.endDate) {
+        let durationDays = this.DEFAULT_ADVERT_DURATION_DAYS;
+        try {
+          const settings = await this.paymentSettingsService.getSettings();
+          durationDays = settings.advertDurationDays || durationDays;
+        } catch {
+          this.logger.warn(
+            `Failed to fetch payment settings, using default duration: ${durationDays} days`,
+          );
+        }
+
+        advert.startDate = now;
+        advert.endDate = new Date(
+          now.getTime() + durationDays * 24 * 60 * 60 * 1000,
+        );
+        advert.approvedAt = now;
+      } else {
+        // Legacy advert handling
+        const endDate = new Date(advert.endDate);
+        if (now > endDate) {
+          throw new BadRequestException(
+            `Cannot approve this advert. The campaign end date (${endDate.toLocaleDateString()}) has already passed.`,
+          );
+        }
+        advert.approvedAt = now;
+      }
     }
 
     advert.status = dto.status;
@@ -259,8 +215,8 @@ export class AdvertsService {
         status: dto.status === AdvertStatus.APPROVED ? 'approved' : 'rejected',
         rejectionReason: dto.rejectionReason,
       });
-    } catch (error) {
-      this.logger.error(`Failed to send advert review email: ${error.message}`);
+    } catch {
+      this.logger.error(`Failed to send advert review email`);
       // Don't throw - email failure shouldn't block review process
     }
 
@@ -274,6 +230,8 @@ export class AdvertsService {
     if (query.type) filter.type = query.type;
     if (query.category) filter.category = new Types.ObjectId(query.category);
     if (query.owner) filter.owner = new Types.ObjectId(query.owner);
+    if (query.location)
+      filter.location = { $regex: query.location, $options: 'i' };
 
     // For public queries (non-admin), only return APPROVED adverts
     if (isAdminQuery) {
@@ -352,30 +310,6 @@ export class AdvertsService {
       advert.status = AdvertStatus.PENDING;
       advert.rejectionReason = undefined;
       advert.reviewedBy = undefined;
-    }
-
-    // Validate dates if being updated
-    const newStartDate = dto.startDate
-      ? new Date(dto.startDate)
-      : advert.startDate;
-    const newEndDate = dto.endDate ? new Date(dto.endDate) : advert.endDate;
-
-    // Validate start date is not in the past if being updated
-    if (dto.startDate && !this.isStartDateValid(newStartDate)) {
-      throw new BadRequestException(
-        'Start date must be today or a future date.',
-      );
-    }
-
-    // Validate duration if either date is being updated
-    if (dto.startDate || dto.endDate) {
-      const durationValidation = this.validateDateDuration(
-        newStartDate,
-        newEndDate,
-      );
-      if (!durationValidation.isValid) {
-        throw new BadRequestException(durationValidation.error);
-      }
     }
 
     if (dto.category) {

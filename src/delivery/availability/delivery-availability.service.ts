@@ -50,6 +50,9 @@ export class DeliveryAvailabilityService {
 
       this.logger.log(`Fetching availability from Calendly. Start: ${startTime}, End: ${endTime}`);
 
+      // Store the original scheduling URL for the calendlyLink
+      const schedulingUrl = settings.calendlyEventTypeUri;
+
       // If the event type URI is a scheduling URL, convert it to API URI
       let eventTypeUri = settings.calendlyEventTypeUri;
       if (eventTypeUri.startsWith('https://calendly.com/')) {
@@ -89,7 +92,7 @@ export class DeliveryAvailabilityService {
 
       this.logger.log(`Calendly API returned ${response.collection?.length || 0} slots`);
 
-      const status = this.processAvailability(response.collection);
+      const status = this.processAvailability(response.collection, schedulingUrl);
       
       // Store in cache
       await this.cacheManager.set(
@@ -105,11 +108,12 @@ export class DeliveryAvailabilityService {
     }
   }
 
-  private processAvailability(slots: any[]): AvailabilityStatusDto {
+  private processAvailability(slots: any[], calendlyLink?: string): AvailabilityStatusDto {
     if (!slots || slots.length === 0) {
       return {
         isAvailable: false,
         message: 'No delivery slots available for the next 7 days.',
+        calendlyLink,
       };
     }
 
@@ -134,6 +138,7 @@ export class DeliveryAvailabilityService {
       return {
         isAvailable: true,
         message: `Delivery slots available today between ${startTime} - ${endTime}`,
+        calendlyLink,
       };
     }
 
@@ -160,6 +165,7 @@ export class DeliveryAvailabilityService {
           isAvailable: false,
           nextAvailableDate: nextSlot.start_time,
           message: `Next delivery available on ${dayName}, ${dateStr} between ${startTime} - ${endTime}`,
+          calendlyLink,
         };
       }
       
@@ -168,12 +174,14 @@ export class DeliveryAvailabilityService {
         isAvailable: false,
         nextAvailableDate: nextSlot.start_time,
         message: `Next delivery available on ${dayName}, ${dateStr} at ${timeStr}`,
+        calendlyLink,
       };
     }
 
     return {
       isAvailable: false,
       message: 'No delivery slots available for the next 7 days.',
+      calendlyLink,
     };
   }
 

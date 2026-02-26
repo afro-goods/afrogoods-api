@@ -55,11 +55,17 @@ export class Advert extends Document {
   @Prop({ type: Boolean, default: true })
   isActive: boolean;
 
-  @Prop({ type: Date, required: true, index: true })
-  startDate: Date;
+  @Prop({ type: Date, required: false, index: true })
+  startDate?: Date;
 
-  @Prop({ type: Date, required: true, index: true })
-  endDate: Date;
+  @Prop({ type: Date, required: false, index: true })
+  endDate?: Date;
+
+  @Prop({ type: String, trim: true, index: true })
+  location?: string;
+
+  @Prop({ type: Date })
+  approvedAt?: Date;
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
   reviewedBy?: Types.ObjectId;

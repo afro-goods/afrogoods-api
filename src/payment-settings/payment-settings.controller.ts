@@ -6,7 +6,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/enum/user.enum';
 
-@Controller('payment-settings')
+@Controller('settings')
 export class PaymentSettingsController {
   constructor(
     private readonly paymentSettingsService: PaymentSettingsService,

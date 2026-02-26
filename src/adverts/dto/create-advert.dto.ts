@@ -9,6 +9,7 @@ import {
   ValidateIf,
   IsUrl,
   IsMongoId,
+  MaxLength,
 } from 'class-validator';
 import { AdvertType } from '../enums/advert-type.enum';
 import { AdvertTargetType } from '../enums/advert-target-type.enum';
@@ -45,11 +46,14 @@ export class CreateAdvertDto {
   @IsNotEmpty()
   targetValue: string;
 
-  @IsDateString()
-  startDate: string;
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  location?: string;
 
-  @IsDateString()
-  endDate: string;
+  @IsString()
+  @IsNotEmpty()
+  captchaToken: string;
 
   @ValidateIf((o) => o.type === AdvertType.JOB)
   @IsString()

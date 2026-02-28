@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import {
@@ -24,6 +24,10 @@ export class PaymentSettingsService {
         eTransferEmail: 'admin@afrogoods.com', // Default value
         whatsappNumber: '1234567890', // Default value
         paymentInstructions: 'Please send e-transfer to the email above.',
+        expressDeliveryFee: 15.00, // Default express delivery fee
+        standardDeliveryFee: 8.00, // Default standard delivery fee
+        currency: 'CAD', // Default currency
+        advertDurationDays: 30, // Default advert duration
       });
     }
     return settings;
@@ -32,6 +36,16 @@ export class PaymentSettingsService {
   async updateSettings(
     updateDto: UpdatePaymentSettingsDto,
   ): Promise<PaymentSettings> {
+    // Manual validation for advertDurationDays range as a secondary check
+    if (
+      updateDto.advertDurationDays !== undefined &&
+      (updateDto.advertDurationDays < 1 || updateDto.advertDurationDays > 90)
+    ) {
+      throw new BadRequestException(
+        'Advert duration must be between 1 and 90 days',
+      );
+    }
+
     const settings = await this.paymentSettingsModel.findOneAndUpdate(
       { settingsType: 'default' },
       { $set: updateDto },

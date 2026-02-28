@@ -1,4 +1,4 @@
-import { IsMongoId, IsNumber, Min } from 'class-validator';
+import { IsMongoId, IsNumber, Min, IsOptional, IsObject } from 'class-validator';
 
 export class CartItemInput {
   @IsMongoId()
@@ -11,5 +11,7 @@ export class CartItemInput {
   @IsNumber()
   priceAtAddedTime: number;
 
+  @IsOptional()
+  @IsObject()
   selectedAttributes?: Record<string, any>;
 }

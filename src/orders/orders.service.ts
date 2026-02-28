@@ -39,6 +39,7 @@ import {
 import { AvailabilityStatus } from 'src/product/enums/availabilty-status.enum';
 import { StripeService } from '../shared/stripe/stripe.service';
 import { config } from '../config';
+import type { Address } from './interfaces/order.interface';
 
 @Injectable()
 export class OrdersService {
@@ -274,7 +275,11 @@ export class OrdersService {
   // ============================================================
 
   /** Create order from cart for registered user (with transaction) */
-  async createOrder(userId: string): Promise<OrderDocument> {
+  async createOrder(
+    userId: string,
+    shippingAddress?: Address,
+    billingAddress?: Address,
+  ): Promise<OrderDocument> {
     const recentOrder = await this.orderModel
       .findOne({
         userId: new Types.ObjectId(userId),
@@ -326,6 +331,8 @@ export class OrdersService {
             totalAmount: cart.totalAmount,
             status: OrderStatus.PENDING,
             isPaid: false,
+            shippingAddress,
+            billingAddress,
             notes: [],
             statusHistory: [
               {
@@ -401,7 +408,10 @@ export class OrdersService {
       limit,
       filter: { userId },
       sort: { createdAt: -1 },
-      populate: [{ path: 'items.productId', select: 'name price images' }],
+      populate: [
+        { path: 'userId', select: 'firstName lastName email phone' },
+        { path: 'items.productId', select: 'name price images' },
+      ],
     });
   }
 
@@ -409,6 +419,7 @@ export class OrdersService {
   async getOrderById(orderId: string, userId: string): Promise<OrderDocument> {
     const order = await this.orderModel
       .findOne({ orderId, userId })
+      .populate('userId', 'firstName lastName email phone')
       .populate('items.productId', 'name price images');
     if (!order) throw new NotFoundException('Order not found');
     return order;

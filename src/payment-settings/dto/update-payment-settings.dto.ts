@@ -1,4 +1,13 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  Min,
+  Max,
+  IsString,
+  IsInt,
+} from 'class-validator';
 
 export class UpdatePaymentSettingsDto {
   @IsEmail()
@@ -12,4 +21,24 @@ export class UpdatePaymentSettingsDto {
   @IsString()
   @IsOptional()
   paymentInstructions?: string;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  expressDeliveryFee?: number;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  standardDeliveryFee?: number;
+
+  @IsString()
+  @IsOptional()
+  currency?: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(90)
+  @IsOptional()
+  advertDurationDays?: number;
 }

@@ -17,7 +17,7 @@ import { BatchCreateCategoryDto } from './dto/batch-create-category.dto';
 import { FirebaseAuthGuard } from 'src/auth/guards/firebase-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
-import { UserRole } from 'src/users/interfaces/user.interface';
+import { UserRole } from 'src/users/enum/user.enum';
 import { CategoryType } from './enums/category-type.enum';
 
 @Controller('categories')

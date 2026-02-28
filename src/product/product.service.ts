@@ -41,6 +41,11 @@ export class ProductsService {
 
       if (dto.images && dto.images.length > 0) {
         const uploadPromises = dto.images.map(async (img) => {
+          // Handle both string URLs and FileInput objects
+          if (typeof img === 'string') {
+            return img;
+          }
+          
           const base64Data = cleanBase64(img.uri);
           if (!base64Data) return null;
 
@@ -121,7 +126,7 @@ export class ProductsService {
     const { page, limit, search, category, sort } = query;
 
     const filter: any = {
-      availabilityStatus: { $in: ['Draft', 'Out of Stock', 'In Stock'] },
+      availabilityStatus: { $in: ['Draft', 'Out of Stock', 'In Stock', 'Archived'] },
     };
 
     if (search) {
@@ -161,41 +166,6 @@ export class ProductsService {
             : { createdAt: -1 },
       populate: [
         { path: 'category', select: 'name description isActive parentId' },
-        { path: 'attributes' },
-      ],
-    });
-
-    return result;
-  }
-
-  async findAllProductsIncludingArchived(query: ProductQueryDto) {
-    const { page, limit, search, category, sort } = query;
-
-    const filter: any = {};
-
-    if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-      ];
-    }
-
-    if (category) {
-      filter.category = category;
-    }
-
-    const result = await this.paginationService.paginate(this.productModel, {
-      page,
-      limit,
-      filter,
-      sort:
-        sort === 'price'
-          ? { price: 1 }
-          : sort === '-price'
-            ? { price: -1 }
-            : { createdAt: -1 },
-      populate: [
-        { path: 'category', select: 'name description isActive' },
         { path: 'attributes' },
       ],
     });
@@ -258,25 +228,34 @@ export class ProductsService {
         if (images.length === 0) {
           imageUrlsToSave = [];
         } else {
-          const uploadPromises = images.map(async (img) => {
-            const base64Data = cleanBase64(img.uri);
-            if (!base64Data) return null;
+          // Process images: keep existing URLs and upload new ones
+          const processedImages = await Promise.all(
+            images.map(async (img) => {
+              // If it's a string (existing URL), keep it as-is
+              if (typeof img === 'string') {
+                return img;
+              }
+              
+              // If it's an object with uri (new upload), process it
+              if (typeof img === 'object' && img.uri) {
+                const base64Data = cleanBase64(img.uri);
+                if (!base64Data) return null;
 
-            const buffer = Buffer.from(base64Data, 'base64');
+                const buffer = Buffer.from(base64Data, 'base64');
 
-            const result = await this.mediaService.uploadFile(buffer, {
-              folder: 'products',
-              resourceType: 'image',
-            });
+                const result = await this.mediaService.uploadFile(buffer, {
+                  folder: 'products',
+                  resourceType: 'image',
+                });
 
-            return result.secure_url;
-          });
+                return result.secure_url;
+              }
+              
+              return null;
+            }),
+          );
 
-          const uploadedUrls = (await Promise.all(uploadPromises)).filter(
-            Boolean,
-          ) as string[];
-
-          imageUrlsToSave = uploadedUrls;
+          imageUrlsToSave = processedImages.filter(Boolean) as string[];
         }
       }
 
@@ -308,16 +287,20 @@ export class ProductsService {
         attributes: attributeIds,
       };
 
-      // Automatically update availabilityStatus based on stock if stock is provided
+      // Automatically update availabilityStatus based on stock
+      // BUT only for In Stock/Out of Stock products (not Draft or Archived)
       if (dto.stock !== undefined) {
-        if (dto.stock === 0) {
-          updateData.availabilityStatus = AvailabilityStatus.OUT_OF_STOCK;
-        } else if (
-          dto.stock > 0 &&
-          product.availabilityStatus === AvailabilityStatus.OUT_OF_STOCK
-        ) {
-          updateData.availabilityStatus = AvailabilityStatus.IN_STOCK;
+        const currentStatus = dto.availabilityStatus || product.availabilityStatus;
+        
+        // Only auto-manage status if it's currently In Stock or Out of Stock
+        if (currentStatus === AvailabilityStatus.IN_STOCK || currentStatus === AvailabilityStatus.OUT_OF_STOCK) {
+          if (dto.stock === 0) {
+            updateData.availabilityStatus = AvailabilityStatus.OUT_OF_STOCK;
+          } else if (dto.stock > 0) {
+            updateData.availabilityStatus = AvailabilityStatus.IN_STOCK;
+          }
         }
+        // If status is Draft or Archived, don't auto-change it based on stock
       }
 
       if (dto.category) {

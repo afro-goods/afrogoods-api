@@ -5,12 +5,16 @@ import { AdvertsService } from './adverts.service';
 import { Advert, AdvertSchema } from './schemas/advert.schema';
 import { CategoriesModule } from '../categories/categories.module';
 import { SharedModule } from '../shared/shared.module';
+import { CaptchaModule } from '../shared/services/captcha/captcha.module';
+import { PaymentSettingsModule } from '../payment-settings/payment-settings.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Advert.name, schema: AdvertSchema }]),
     CategoriesModule,
     SharedModule,
+    CaptchaModule,
+    PaymentSettingsModule,
   ],
   controllers: [AdvertsController],
   providers: [AdvertsService],

@@ -4,9 +4,9 @@ import { UpdatePaymentSettingsDto } from './dto/update-payment-settings.dto';
 import { FirebaseAuthGuard } from '../auth/guards/firebase-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '../users/interfaces/user.interface';
+import { UserRole } from '../users/enum/user.enum';
 
-@Controller('payment-settings')
+@Controller('settings')
 export class PaymentSettingsController {
   constructor(
     private readonly paymentSettingsService: PaymentSettingsService,
@@ -15,6 +15,15 @@ export class PaymentSettingsController {
   @Get()
   async getSettings() {
     return this.paymentSettingsService.getSettings();
+  }
+
+  @Get('delivery-fees')
+  async getDeliveryFees() {
+    const settings = await this.paymentSettingsService.getSettings();
+    return {
+      express: settings.expressDeliveryFee,
+      standard: settings.standardDeliveryFee,
+    };
   }
 
   @Put()

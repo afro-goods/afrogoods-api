@@ -12,7 +12,7 @@ import { FirebaseAuthGuard } from 'src/auth/guards/firebase-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
-import { UserRole } from './interfaces/user.interface';
+import { UserRole } from './enum/user.enum';
 import { User } from './schemas/user.schema';
 import { GetUsersQueryDto } from './dto/get-users-query.dto';
 import { UpdateUserDto } from './dto/update-user.dto';

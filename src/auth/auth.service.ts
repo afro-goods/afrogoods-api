@@ -10,7 +10,7 @@ import { UsersService } from '../users/users.service';
 import { EmailService } from '../shared/services/email/email.service';
 import { RegisterDto } from './dto/register.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
-import { UserRole } from 'src/users/interfaces/user.interface';
+import { UserRole } from 'src/users/enum/user.enum';
 import { LoginDto } from './dto/login.dto';
 
 @Injectable()

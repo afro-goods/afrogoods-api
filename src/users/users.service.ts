@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Model, Connection } from 'mongoose';
 import { User } from './schemas/user.schema';
-import { UserRole } from './interfaces/user.interface';
+import { UserRole } from './enum/user.enum';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PaginationOptions } from 'src/shared/services/pagination/interfaces/pagination.interface';

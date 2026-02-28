@@ -16,8 +16,9 @@ import { FirebaseAuthGuard } from '../auth/guards/firebase-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '../users/interfaces/user.interface';
+import { UserRole } from '../users/enum/user.enum';
 import { GuestCheckoutDto } from './dto/guest-checkout.dto';
+import { CreateOrderDto } from './dto/create-order.dto';
 import { AdminOrderSearchDto } from './dto/admin-order-search.dto';
 import { UpdateShippingAddressDto } from './dto/update-shipping-address.dto';
 import { CancelOrderDto } from './dto/cancel-order.dto';
@@ -36,8 +37,15 @@ export class OrdersController {
   /** POST /orders - Create order from cart */
   @Post()
   @UseGuards(FirebaseAuthGuard)
-  createOrder(@CurrentUser('_id') userId: string) {
-    return this.ordersService.createOrder(userId);
+  createOrder(
+    @CurrentUser('_id') userId: string,
+    @Body() createOrderDto: CreateOrderDto,
+  ) {
+    return this.ordersService.createOrder(
+      userId,
+      createOrderDto.shippingAddress,
+      createOrderDto.billingAddress,
+    );
   }
 
   /** GET /orders/my - List user's orders (paginated) */

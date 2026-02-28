@@ -21,6 +21,8 @@ import { AdvertsModule } from './adverts/adverts.module';
 import { PaymentSettingsModule } from './payment-settings/payment-settings.module';
 import { StripeModule } from './shared/stripe/stripe.module';
 import { WebhooksModule } from './payment-settings/webhooks/webhooks.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { DeliveryModule } from './delivery/delivery.module';
 // import { PaymentModule } from './payments/payment.module';
 import { CartModule } from './cart/cart.module';
 
@@ -47,8 +49,11 @@ const FeatureModules = [
   ProductsModule,
   OrdersModule,
   AdvertsModule,
+  PaymentSettingsModule,
   StripeModule,
   WebhooksModule,
+  DashboardModule,
+  DeliveryModule,
 ];
 
 @Module({

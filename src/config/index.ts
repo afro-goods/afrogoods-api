@@ -12,12 +12,17 @@ interface EnvVars {
   JWT_SECRET: string;
   JWT_EXPIRES_IN: string;
 
+  APP_URL?: string;
+
   CLOUDINARY_URL?: string;
   CLOUDINARY_CLOUD_NAME: string;
   CLOUDINARY_API_KEY: string;
   CLOUDINARY_API_SECRET: string;
 
   FIREBASE_SERVICE_ACCOUNT_BASE64: string;
+
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
 }
 
 const schema = joi
@@ -33,6 +38,8 @@ const schema = joi
     JWT_SECRET: joi.string().required(),
     JWT_EXPIRES_IN: joi.string().default('1d'),
 
+    APP_URL: joi.string().optional().allow(''),
+
     CLOUDINARY_URL: joi
       .string()
       .uri({ scheme: ['cloudinary'] })
@@ -42,6 +49,9 @@ const schema = joi
     CLOUDINARY_API_SECRET: joi.string().required(),
 
     FIREBASE_SERVICE_ACCOUNT_BASE64: joi.string().base64().required(),
+
+    STRIPE_SECRET_KEY: joi.string().optional(),
+    STRIPE_WEBHOOK_SECRET: joi.string().optional(),
   })
   .unknown(true);
 
@@ -74,6 +84,13 @@ export const config = {
   auth: {
     jwtSecret: env.JWT_SECRET,
     jwtExpiresIn: env.JWT_EXPIRES_IN,
+  },
+  app: {
+    url: ((env.APP_URL ?? '').trim() || 'https://afrogoods.com') as string,
+  },
+  stripe: {
+    secretKey: env.STRIPE_SECRET_KEY ?? '',
+    webhookSecret: env.STRIPE_WEBHOOK_SECRET ?? '',
   },
   cloudinary: {
     url: env.CLOUDINARY_URL || undefined,

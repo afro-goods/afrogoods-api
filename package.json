@@ -9,6 +9,7 @@
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
+    "dev": "nest start --watch",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
@@ -21,7 +22,9 @@
     "migrate:attributes": "tsx src/scripts/migrate-product-attributes.ts",
     "test:advert-email": "node scripts/test-advert-email.js",
     "test:advert-reviewed-email": "node scripts/test-advert-reviewed-email.js",
-    "promote-admin": "node scripts/promote-user-to-admin.js"
+    "promote-admin": "node scripts/promote-user-to-admin.js",
+    "test:firebase-token": "node scripts/get-firebase-id-token.js",
+    "seed:product": "node scripts/seed-product.js"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.4",
@@ -60,6 +63,7 @@
     "reflect-metadata": "^0.2.2",
     "resend": "^6.8.0",
     "rxjs": "^7.8.1",
+    "stripe": "^20.4.0",
     "uuid": "^13.0.0"
   },
   "devDependencies": {

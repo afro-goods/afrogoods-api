@@ -13,6 +13,19 @@ export interface CalendlyAvailabilityResponse {
   collection: CalendlyAvailabilitySlot[];
 }
 
+interface CalendlyUserMeResponse {
+  resource: { uri: string };
+}
+
+interface CalendlyEventTypeItem {
+  uri: string;
+  scheduling_url?: string;
+}
+
+interface CalendlyEventTypesResponse {
+  collection: CalendlyEventTypeItem[];
+}
+
 @Injectable()
 export class CalendlyApiClient {
   private readonly logger = new Logger(CalendlyApiClient.name);
@@ -61,7 +74,7 @@ export class CalendlyApiClient {
   ): Promise<CalendlyAvailabilityResponse> {
     try {
       const response = await firstValueFrom(
-        this.httpService.get(`${this.baseUrl}/event_type_available_times`, {
+        this.httpService.get<CalendlyAvailabilityResponse>(`${this.baseUrl}/event_type_available_times`, {
           headers: {
             Authorization: `Bearer ${apiToken}`,
             'Content-Type': 'application/json',
@@ -132,7 +145,7 @@ export class CalendlyApiClient {
 
       // Get all event types for this user
       const eventTypesResponse = await firstValueFrom(
-        this.httpService.get(`${this.baseUrl}/event_types`, {
+        this.httpService.get<CalendlyEventTypesResponse>(`${this.baseUrl}/event_types`, {
           headers: {
             Authorization: `Bearer ${apiToken}`,
             'Content-Type': 'application/json',

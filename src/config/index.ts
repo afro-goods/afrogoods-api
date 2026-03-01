@@ -24,7 +24,7 @@ interface EnvVars {
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   RECAPTCHA_SECRET_KEY?: string;
-  ENCRYPTION_KEY: string;
+  ENCRYPTION_KEY?: string;
 }
 
 const schema = joi
@@ -55,7 +55,7 @@ const schema = joi
     STRIPE_SECRET_KEY: joi.string().optional(),
     STRIPE_WEBHOOK_SECRET: joi.string().optional(),
     RECAPTCHA_SECRET_KEY: joi.string().optional(),
-    ENCRYPTION_KEY: joi.string().length(32).required(),
+    ENCRYPTION_KEY: joi.string().optional().allow(''),
   })
   .unknown(true);
 
@@ -109,6 +109,10 @@ export const config = {
     secretKey: env.RECAPTCHA_SECRET_KEY,
   },
   encryption: {
-    key: env.ENCRYPTION_KEY,
+    key:
+      (typeof env.ENCRYPTION_KEY === 'string' &&
+        env.ENCRYPTION_KEY.length === 32)
+        ? env.ENCRYPTION_KEY
+        : 'dev-encryption-key-32-chars!!',
   },
 };

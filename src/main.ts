@@ -5,7 +5,9 @@ import { json, urlencoded } from 'express';
 import { ValidationPipe } from '@nestjs/common';
 
 const origins: Record<string, string[]> = {
-  production: [''],
+  production: [config.cors.appUrl, config.cors.adminDashboardUrl].filter(
+    (url): url is string => !!url,
+  ),
   development: [
     'http://192.168.0.198:5173',
     'http://192.168.0.198:5174',

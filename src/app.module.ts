@@ -21,6 +21,7 @@ import { AdvertsModule } from './adverts/adverts.module';
 import { PaymentSettingsModule } from './payment-settings/payment-settings.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DeliveryModule } from './delivery/delivery.module';
+import { HealthModule } from './health/health.module';
 // import { PaymentModule } from './payments/payment.module';
 import { CartModule } from './cart/cart.module';
 
@@ -50,6 +51,7 @@ const FeatureModules = [
   PaymentSettingsModule,
   DashboardModule,
   DeliveryModule,
+  HealthModule,
 ];
 
 @Module({

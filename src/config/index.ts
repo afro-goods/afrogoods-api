@@ -20,6 +20,9 @@ interface EnvVars {
   FIREBASE_SERVICE_ACCOUNT_BASE64: string;
   RECAPTCHA_SECRET_KEY?: string;
   ENCRYPTION_KEY: string;
+
+  APP_URL?: string;
+  ADMIN_DASHBOARD_URL?: string;
 }
 
 const schema = joi
@@ -46,6 +49,9 @@ const schema = joi
     FIREBASE_SERVICE_ACCOUNT_BASE64: joi.string().base64().required(),
     RECAPTCHA_SECRET_KEY: joi.string().optional(),
     ENCRYPTION_KEY: joi.string().length(32).required(),
+
+    APP_URL: joi.string().uri().optional(),
+    ADMIN_DASHBOARD_URL: joi.string().uri().optional(),
   })
   .unknown(true);
 
@@ -93,5 +99,9 @@ export const config = {
   },
   encryption: {
     key: env.ENCRYPTION_KEY,
+  },
+  cors: {
+    appUrl: env.APP_URL,
+    adminDashboardUrl: env.ADMIN_DASHBOARD_URL,
   },
 };

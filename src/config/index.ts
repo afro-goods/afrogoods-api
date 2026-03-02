@@ -12,8 +12,6 @@ interface EnvVars {
   JWT_SECRET: string;
   JWT_EXPIRES_IN: string;
 
-  APP_URL?: string;
-
   CLOUDINARY_URL?: string;
   CLOUDINARY_CLOUD_NAME: string;
   CLOUDINARY_API_KEY: string;
@@ -24,7 +22,10 @@ interface EnvVars {
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   RECAPTCHA_SECRET_KEY?: string;
-  ENCRYPTION_KEY?: string;
+  ENCRYPTION_KEY: string;
+
+  APP_URL?: string;
+  ADMIN_DASHBOARD_URL?: string;
 }
 
 const schema = joi
@@ -40,8 +41,6 @@ const schema = joi
     JWT_SECRET: joi.string().required(),
     JWT_EXPIRES_IN: joi.string().default('1d'),
 
-    APP_URL: joi.string().optional().allow(''),
-
     CLOUDINARY_URL: joi
       .string()
       .uri({ scheme: ['cloudinary'] })
@@ -55,7 +54,10 @@ const schema = joi
     STRIPE_SECRET_KEY: joi.string().optional(),
     STRIPE_WEBHOOK_SECRET: joi.string().optional(),
     RECAPTCHA_SECRET_KEY: joi.string().optional(),
-    ENCRYPTION_KEY: joi.string().optional().allow(''),
+    ENCRYPTION_KEY: joi.string().length(32).required(),
+
+    APP_URL: joi.string().uri().optional(),
+    ADMIN_DASHBOARD_URL: joi.string().uri().optional(),
   })
   .unknown(true);
 
@@ -114,5 +116,9 @@ export const config = {
         env.ENCRYPTION_KEY.length === 32)
         ? env.ENCRYPTION_KEY
         : 'dev-encryption-key-32-chars!!',
+  },
+  cors: {
+    appUrl: env.APP_URL,
+    adminDashboardUrl: env.ADMIN_DASHBOARD_URL,
   },
 };

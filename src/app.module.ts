@@ -23,6 +23,7 @@ import { StripeModule } from './shared/stripe/stripe.module';
 import { WebhooksModule } from './payment-settings/webhooks/webhooks.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DeliveryModule } from './delivery/delivery.module';
+import { HealthModule } from './health/health.module';
 // import { PaymentModule } from './payments/payment.module';
 import { CartModule } from './cart/cart.module';
 
@@ -54,6 +55,7 @@ const FeatureModules = [
   WebhooksModule,
   DashboardModule,
   DeliveryModule,
+  HealthModule,
 ];
 
 @Module({

@@ -1,6 +1,5 @@
 import {
   IsEmail,
-  IsNotEmpty,
   IsNumber,
   IsOptional,
   Min,
@@ -11,12 +10,12 @@ import {
 
 export class UpdatePaymentSettingsDto {
   @IsEmail()
-  @IsNotEmpty()
-  eTransferEmail: string;
+  @IsOptional()
+  eTransferEmail?: string;
 
   @IsString()
-  @IsNotEmpty()
-  whatsappNumber: string;
+  @IsOptional()
+  whatsappNumber?: string;
 
   @IsString()
   @IsOptional()

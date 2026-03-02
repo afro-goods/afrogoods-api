@@ -12,6 +12,7 @@ import { FulfillmentGroupingService } from './services/fulfillment-grouping.serv
 import { PaginationService } from '../shared/services/pagination/services/pagination.service';
 import { SharedModule } from '../shared/shared.module';
 import { PaymentSettingsModule } from '../payment-settings/payment-settings.module';
+import { StripeModule } from '../shared/stripe/stripe.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { PaymentSettingsModule } from '../payment-settings/payment-settings.modu
     AuthModule,
     SharedModule,
     PaymentSettingsModule,
+    StripeModule,
   ],
   controllers: [OrdersController],
   providers: [
@@ -34,4 +36,4 @@ import { PaymentSettingsModule } from '../payment-settings/payment-settings.modu
   ],
   exports: [OrdersService, OrdersEmailService, FulfillmentGroupingService],
 })
-export class OrdersModule {}
+export class OrdersModule { }

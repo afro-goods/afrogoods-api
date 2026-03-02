@@ -19,6 +19,8 @@ import { CategoriesModule } from './categories/categories.module';
 import { OrdersModule } from './orders/orders.module';
 import { AdvertsModule } from './adverts/adverts.module';
 import { PaymentSettingsModule } from './payment-settings/payment-settings.module';
+import { StripeModule } from './shared/stripe/stripe.module';
+import { WebhooksModule } from './payment-settings/webhooks/webhooks.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DeliveryModule } from './delivery/delivery.module';
 import { HealthModule } from './health/health.module';
@@ -49,6 +51,8 @@ const FeatureModules = [
   OrdersModule,
   AdvertsModule,
   PaymentSettingsModule,
+  StripeModule,
+  WebhooksModule,
   DashboardModule,
   DeliveryModule,
   HealthModule,
@@ -65,4 +69,4 @@ const FeatureModules = [
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

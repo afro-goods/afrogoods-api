@@ -37,8 +37,6 @@ import {
   generateTrackingUrl as generateCarrierTrackingUrl,
 } from './enums/shipping-carrier.enum';
 import { AvailabilityStatus } from 'src/product/enums/availabilty-status.enum';
-import { StripeService } from '../shared/stripe/stripe.service';
-import { config } from '../config';
 import type { Address } from './interfaces/order.interface';
 
 @Injectable()
@@ -59,8 +57,7 @@ export class OrdersService {
     private readonly paginationService: PaginationService,
     private readonly usersService: UsersService,
     private readonly paymentSettingsService: PaymentSettingsService,
-    private readonly stripeService: StripeService,
-  ) { }
+  ) {}
 
   // ============================================================
   // BUSINESS RULES CONFIGURATION
@@ -425,68 +422,6 @@ export class OrdersService {
     return order;
   }
 
-  /**
-   * Create Stripe Checkout Session for a registered user's order.
-   * Returns { url } for frontend redirect. Order must be PENDING and unpaid.
-   */
-  async createStripeCheckoutSession(
-    orderId: string,
-    userId: string,
-  ): Promise<{ url: string }> {
-    const order = await this.orderModel.findOne({ orderId, userId });
-    if (!order) throw new NotFoundException('Order not found');
-    if (order.isPaid) {
-      throw new BadRequestException('Order is already paid');
-    }
-    if (order.status !== OrderStatus.PENDING) {
-      throw new BadRequestException(
-        `Cannot pay order with status: ${order.status}`,
-      );
-    }
-    const appUrl = config.app.url;
-    const totalAmountCents = Math.round(order.totalAmount * 100);
-    return this.stripeService.createCheckoutSession({
-      orderId: order.orderId,
-      totalAmountCents,
-      successUrl: `${appUrl}/orders/${order.orderId}`,
-      cancelUrl: `${appUrl}/checkout`,
-      isGuest: false,
-    });
-  }
-
-  /**
-   * Create Stripe Checkout Session for a guest order.
-   * Email must match the order's customerInfo.email.
-   */
-  async createGuestStripeCheckoutSession(
-    orderId: string,
-    email: string,
-  ): Promise<{ url: string }> {
-    const order = await this.guestOrderModel.findOne({
-      orderId,
-      'customerInfo.email': email,
-    });
-    if (!order) throw new NotFoundException('Order not found');
-    if (order.isPaid) {
-      throw new BadRequestException('Order is already paid');
-    }
-    if (order.status !== OrderStatus.PENDING) {
-      throw new BadRequestException(
-        `Cannot pay order with status: ${order.status}`,
-      );
-    }
-    const appUrl = config.app.url;
-    const totalAmountCents = Math.round(order.totalAmount * 100);
-    return this.stripeService.createCheckoutSession({
-      orderId: order.orderId,
-      totalAmountCents,
-      successUrl: `${appUrl}/track-order?orderId=${encodeURIComponent(order.orderId)}&email=${encodeURIComponent(email)}`,
-      cancelUrl: `${appUrl}/checkout`,
-      customerEmail: email,
-      isGuest: true,
-    });
-  }
-
   /** Cancel order for registered user (with transaction) */
   async cancelOrder(
     orderId: string,
@@ -764,9 +699,7 @@ export class OrdersService {
       .filter(Boolean) as Types.ObjectId[];
 
     if (!productIds.length) {
-      throw new BadRequestException(
-        'No valid products in cart. Each productId must be a valid 24-character hex MongoDB ObjectId (e.g. 507f1f77bcf86cd799439011).',
-      );
+      throw new BadRequestException('No valid products in cart');
     }
 
     const products = await this.productModel
@@ -1113,18 +1046,18 @@ export class OrdersService {
       isGuestOrder: isGuest,
       customer: isGuest
         ? {
-          name: `${order.customerInfo.firstName} ${order.customerInfo.lastName}`,
-          email: order.customerInfo.email,
-          phone: order.customerInfo.phone,
-        }
+            name: `${order.customerInfo.firstName} ${order.customerInfo.lastName}`,
+            email: order.customerInfo.email,
+            phone: order.customerInfo.phone,
+          }
         : {
-          id: order.userId?._id?.toString(),
-          name: order.userId
-            ? `${order.userId.firstName} ${order.userId.lastName}`
-            : 'Unknown',
-          email: order.userId?.email || 'No email',
-          phone: order.userId?.phone,
-        },
+            id: order.userId?._id?.toString(),
+            name: order.userId
+              ? `${order.userId.firstName} ${order.userId.lastName}`
+              : 'Unknown',
+            email: order.userId?.email || 'No email',
+            phone: order.userId?.phone,
+          },
       itemsCount: order.items?.length || 0,
       items: (order.items || []).map((item: any) => ({
         productId: item.productId?.toString() || null,
@@ -1162,14 +1095,10 @@ export class OrdersService {
     };
   }
 
-  /**
-   * Confirm order (payment confirmed).
-   * Called by: (1) Stripe webhook when checkout.session.completed, (2) Admin when manually confirming payment.
-   * Idempotent: if already paid, returns the order without changing it.
-   */
+  /** Confirm order (Admin only) */
   async confirmOrder(
     orderId: string,
-    sourceOrAdminId: string, // 'stripe_webhook' when from webhook, or admin user id when from admin
+    adminId: string,
   ): Promise<Order | GuestOrder> {
     let order: OrderDocument | GuestOrderDocument | null =
       await this.orderModel.findOne({ orderId });
@@ -1184,19 +1113,8 @@ export class OrdersService {
       throw new NotFoundException(`Order with ID ${orderId} not found`);
     }
 
-    if (order.isPaid) {
-      this.logger.log(`Order ${orderId} already paid, skipping confirmation`);
-      return order;
-    }
-
     if (order.status !== OrderStatus.PENDING) {
-      if (sourceOrAdminId === 'stripe_webhook') {
-        this.logger.warn(
-          `Order ${orderId} has status ${order.status}, not PENDING; marking paid anyway (webhook)`,
-        );
-      } else {
-        throw new BadRequestException(`Order can only be confirmed when PENDING`);
-      }
+      throw new BadRequestException(`Order can only be confirmed when PENDING`);
     }
 
     const previousStatus = order.status;
@@ -1215,15 +1133,13 @@ export class OrdersService {
       }
     }
 
-    const isFromWebhook = sourceOrAdminId === 'stripe_webhook';
+    // Add status history
     order.statusHistory.push({
       status: OrderStatus.CONFIRMED,
       previousStatus,
       createdAt: new Date(),
-      updatedBy: sourceOrAdminId,
-      reason: isFromWebhook
-        ? 'Payment confirmed via Stripe'
-        : 'Payment confirmed by admin',
+      updatedBy: adminId,
+      reason: 'Payment confirmed by admin',
     });
 
     await order.save();
@@ -1289,29 +1205,6 @@ export class OrdersService {
     }
 
     return order;
-  }
-
-  /**
-   * Mark order as paid after successful Stripe checkout.
-   * Delegates to confirmOrder(orderId, 'stripe_webhook'). Returns null if order not found.
-   * Prefer calling confirmOrder(orderId, 'stripe_webhook') from the webhook.
-   */
-  async markOrderPaidByStripe(
-    orderId: string,
-    _isGuest?: boolean,
-    _guestEmail?: string,
-  ): Promise<OrderDocument | GuestOrderDocument | null> {
-    try {
-      return (await this.confirmOrder(orderId, 'stripe_webhook')) as
-        | OrderDocument
-        | GuestOrderDocument
-        | null;
-    } catch (e) {
-      if (e instanceof NotFoundException) {
-        return null;
-      }
-      throw e;
-    }
   }
 
   /** Get order details for admin */

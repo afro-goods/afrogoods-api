@@ -18,9 +18,6 @@ interface EnvVars {
   CLOUDINARY_API_SECRET: string;
 
   FIREBASE_SERVICE_ACCOUNT_BASE64: string;
-
-  STRIPE_SECRET_KEY?: string;
-  STRIPE_WEBHOOK_SECRET?: string;
   RECAPTCHA_SECRET_KEY?: string;
   ENCRYPTION_KEY: string;
 
@@ -50,9 +47,6 @@ const schema = joi
     CLOUDINARY_API_SECRET: joi.string().required(),
 
     FIREBASE_SERVICE_ACCOUNT_BASE64: joi.string().base64().required(),
-
-    STRIPE_SECRET_KEY: joi.string().optional(),
-    STRIPE_WEBHOOK_SECRET: joi.string().optional(),
     RECAPTCHA_SECRET_KEY: joi.string().optional(),
     ENCRYPTION_KEY: joi.string().length(32).required(),
 
@@ -91,13 +85,6 @@ export const config = {
     jwtSecret: env.JWT_SECRET,
     jwtExpiresIn: env.JWT_EXPIRES_IN,
   },
-  app: {
-    url: ((env.APP_URL ?? '').trim() || 'https://afrogoods.com') as string,
-  },
-  stripe: {
-    secretKey: env.STRIPE_SECRET_KEY ?? '',
-    webhookSecret: env.STRIPE_WEBHOOK_SECRET ?? '',
-  },
   cloudinary: {
     url: env.CLOUDINARY_URL || undefined,
     cloudName: env.CLOUDINARY_CLOUD_NAME,
@@ -111,11 +98,7 @@ export const config = {
     secretKey: env.RECAPTCHA_SECRET_KEY,
   },
   encryption: {
-    key:
-      (typeof env.ENCRYPTION_KEY === 'string' &&
-        env.ENCRYPTION_KEY.length === 32)
-        ? env.ENCRYPTION_KEY
-        : 'dev-encryption-key-32-chars!!',
+    key: env.ENCRYPTION_KEY,
   },
   cors: {
     appUrl: env.APP_URL,

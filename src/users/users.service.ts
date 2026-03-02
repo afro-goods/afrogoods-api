@@ -124,23 +124,4 @@ export class UsersService {
 
     return user;
   }
-
-  /**
-   * Link an existing user (matched by email) to a Firebase UID.
-   * Used when the same email was registered with a different Firebase UID.
-   */
-  async linkFirebaseUidByEmail(
-    email: string,
-    firebaseUid: string,
-  ): Promise<User | null> {
-    const user = await this.userModel
-      .findOneAndUpdate(
-        { email: email.toLowerCase() },
-        { $set: { firebaseUid } },
-        { new: true },
-      )
-      .lean()
-      .exec();
-    return user ?? null;
-  }
 }

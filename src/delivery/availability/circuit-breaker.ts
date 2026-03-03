@@ -3,7 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 enum CircuitBreakerState {
   CLOSED,
   OPEN,
-  HALF_OPEN
+  HALF_OPEN,
 }
 
 @Injectable()
@@ -35,9 +35,11 @@ export class CircuitBreaker {
   recordFailure(): void {
     this.failures++;
     this.lastFailureTime = Date.now();
-    
+
     if (this.failures >= this.threshold) {
-      this.logger.error(`Circuit breaker opened after ${this.failures} failures.`);
+      this.logger.error(
+        `Circuit breaker opened after ${this.failures} failures.`,
+      );
       this.state = CircuitBreakerState.OPEN;
     }
   }

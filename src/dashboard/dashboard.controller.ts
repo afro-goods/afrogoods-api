@@ -22,7 +22,9 @@ export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('metrics')
-  getMetrics(@Query() query: DashboardMetricsQueryDto): Promise<DashboardMetricsDto> {
+  getMetrics(
+    @Query() query: DashboardMetricsQueryDto,
+  ): Promise<DashboardMetricsDto> {
     return this.dashboardService.getMetrics(query);
   }
 

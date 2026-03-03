@@ -428,7 +428,7 @@ export class DashboardService {
         const now = new Date();
         const month = query.month || now.getMonth() + 1;
         const year = query.year || now.getFullYear();
-        
+
         // Create date range for the specified month
         startDate = new Date(year, month - 1, 1);
         endDate = new Date(year, month, 0, 23, 59, 59, 999);

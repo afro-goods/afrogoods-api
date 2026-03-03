@@ -44,6 +44,8 @@ export class OrdersController {
       userId,
       createOrderDto.shippingAddress,
       createOrderDto.billingAddress,
+      createOrderDto.paymentMethod,
+      createOrderDto.deliveryFee,
     );
   }
 
@@ -100,6 +102,16 @@ export class OrdersController {
     @Body() noteDto: { content: string },
   ) {
     return this.ordersService.addCustomerNote(orderId, userId, noteDto.content);
+  }
+
+  /** POST /orders/:orderId/checkout - Create Stripe checkout session */
+  @Post(':orderId/checkout')
+  @UseGuards(FirebaseAuthGuard)
+  createCheckoutSession(
+    @Param('orderId') orderId: string,
+    @CurrentUser('_id') userId: string,
+  ) {
+    return this.ordersService.createCheckoutSessionForOrder(orderId, userId);
   }
 
   /** POST /orders/:id/mock-pay - Mock payment for testing */
@@ -170,6 +182,17 @@ export class OrdersController {
       noteDto.email,
       noteDto.content,
     );
+  }
+
+  /** POST /orders/guest/:orderId/checkout - Create Stripe checkout session for guest */
+  @Post('guest/:orderId/checkout')
+  async createGuestCheckoutSession(
+    @Param('orderId') orderId: string,
+    @Body() body: { email: string },
+    @Query('email') emailFromQuery?: string,
+  ) {
+    const email: string = body?.email || emailFromQuery || '';
+    return this.ordersService.createGuestCheckoutSession(orderId, email);
   }
 
   // ============================================================

@@ -38,6 +38,9 @@ import {
 } from './enums/shipping-carrier.enum';
 import { AvailabilityStatus } from 'src/product/enums/availabilty-status.enum';
 import type { Address } from './interfaces/order.interface';
+import { StripeService } from '../shared/services/stripe/stripe.service';
+import { PaymentMethod } from './enums/payment-method.enum';
+import { config } from '../config';
 
 @Injectable()
 export class OrdersService {
@@ -57,6 +60,7 @@ export class OrdersService {
     private readonly paginationService: PaginationService,
     private readonly usersService: UsersService,
     private readonly paymentSettingsService: PaymentSettingsService,
+    private readonly stripeService: StripeService,
   ) {}
 
   // ============================================================
@@ -163,6 +167,7 @@ export class OrdersService {
       productId: any;
       quantity: number;
       priceAtAddedTime: number;
+      selectedAttributes?: Record<string, any>;
       deliveryTimeUnit?: DeliveryTimeUnit;
       deliveryMinTime?: number;
       deliveryMaxTime?: number;
@@ -190,6 +195,7 @@ export class OrdersService {
         productId: item.productId,
         quantity: item.quantity,
         priceAtAddedTime: item.priceAtAddedTime,
+        selectedAttributes: item.selectedAttributes || {},
         deliveryTimeUnit: productData.deliveryTimeUnit,
         deliveryMinTime: productData.deliveryMinTime,
         deliveryMaxTime: productData.deliveryMaxTime,
@@ -276,6 +282,8 @@ export class OrdersService {
     userId: string,
     shippingAddress?: Address,
     billingAddress?: Address,
+    paymentMethod?: PaymentMethod,
+    deliveryFee?: number,
   ): Promise<OrderDocument> {
     const recentOrder = await this.orderModel
       .findOne({
@@ -307,6 +315,7 @@ export class OrdersService {
         productId: new Types.ObjectId(item.productId),
         quantity: item.quantity,
         priceAtPurchase: item.priceAtAddedTime,
+        selectedAttributes: item.selectedAttributes || {},
         deliveryTimeUnit: item.deliveryTimeUnit,
         deliveryMinTime: item.deliveryMinTime,
         deliveryMaxTime: item.deliveryMaxTime,
@@ -318,6 +327,11 @@ export class OrdersService {
           orderItems as any,
         );
 
+      // Calculate total amount including delivery fee
+      const orderSubtotal = cart.totalAmount;
+      const orderDeliveryFee = deliveryFee || 0;
+      const totalAmount = orderSubtotal + orderDeliveryFee;
+
       const [order] = await this.orderModel.create(
         [
           {
@@ -325,9 +339,12 @@ export class OrdersService {
             userId: new Types.ObjectId(userId),
             items: orderItems,
             fulfillments,
-            totalAmount: cart.totalAmount,
+            orderSubtotal: orderSubtotal,
+            totalAmount: totalAmount,
             status: OrderStatus.PENDING,
             isPaid: false,
+            paymentMethod: paymentMethod || PaymentMethod.E_TRANSFER,
+            deliveryFee: orderDeliveryFee,
             shippingAddress,
             billingAddress,
             notes: [],
@@ -347,6 +364,8 @@ export class OrdersService {
       cart.items = [];
       cart.totalAmount = 0;
       await cart.save({ session });
+
+      this.logger.log(`Order created: ${order.orderId}`);
 
       await order.populate([
         { path: 'userId', select: 'firstName lastName email phone' },
@@ -596,16 +615,21 @@ export class OrdersService {
       const validItems = await this.validateGuestItems(dto.items, session);
       await this.reduceStock(validItems, session);
 
-      const totalAmount = validItems.reduce(
+      const orderSubtotal = validItems.reduce(
         (sum, item) => sum + item.price * item.quantity,
         0,
       );
+
+      // Calculate total amount including delivery fee
+      const orderDeliveryFee = dto.deliveryFee || 0;
+      const totalAmount = orderSubtotal + orderDeliveryFee;
 
       // Create order items with delivery timeline captured from products
       const orderItems = validItems.map((item) => ({
         productId: new Types.ObjectId(item.productId),
         quantity: item.quantity,
         priceAtPurchase: item.price,
+        selectedAttributes: item.selectedAttributes || {},
         deliveryTimeUnit: item.deliveryTimeUnit,
         deliveryMinTime: item.deliveryMinTime,
         deliveryMaxTime: item.deliveryMaxTime,
@@ -626,9 +650,12 @@ export class OrdersService {
             billingAddress: dto.billingAddress,
             items: orderItems,
             fulfillments,
+            orderSubtotal: orderSubtotal,
             totalAmount,
             status: OrderStatus.PENDING,
+            paymentMethod: dto.paymentMethod || PaymentMethod.E_TRANSFER,
             isPaid: false,
+            deliveryFee: orderDeliveryFee,
             notes: [],
             statusHistory: [
               {
@@ -642,6 +669,8 @@ export class OrdersService {
         ],
         { session },
       );
+
+      this.logger.log(`Guest order created: ${guestOrder.orderId}`);
 
       await guestOrder.populate('items.productId', 'name price images');
       return guestOrder;
@@ -687,7 +716,11 @@ export class OrdersService {
 
   /** Validate guest checkout items and return with prices */
   private async validateGuestItems(
-    items: Array<{ productId: string; quantity: number }>,
+    items: Array<{
+      productId: string;
+      quantity: number;
+      selectedAttributes?: Record<string, string>;
+    }>,
     session?: ClientSession,
   ) {
     const productIds = items
@@ -705,8 +738,9 @@ export class OrdersService {
     const products = await this.productModel
       .find({ _id: { $in: productIds }, availabilityStatus: 'In Stock' })
       .select(
-        '_id stock price deliveryTimeUnit deliveryMinTime deliveryMaxTime',
+        '_id stock price attributes deliveryTimeUnit deliveryMinTime deliveryMaxTime',
       )
+      .populate('attributes')
       .session(session || null)
       .lean();
 
@@ -720,6 +754,7 @@ export class OrdersService {
         {
           stock: p.stock,
           price: p.price,
+          attributes: p.attributes,
           deliveryTimeUnit: p.deliveryTimeUnit,
           deliveryMinTime: p.deliveryMinTime,
           deliveryMaxTime: p.deliveryMaxTime,
@@ -731,6 +766,7 @@ export class OrdersService {
       productId: string;
       quantity: number;
       price: number;
+      selectedAttributes?: Record<string, string>;
       deliveryTimeUnit?: DeliveryTimeUnit;
       deliveryMinTime?: number;
       deliveryMaxTime?: number;
@@ -749,10 +785,53 @@ export class OrdersService {
         );
         continue;
       }
+
+      // Calculate price based on selected attributes/options (same logic as cart service)
+      let finalPrice = product.price;
+      if (item.selectedAttributes && product.attributes) {
+        for (const attr of product.attributes as any[]) {
+          const selected = item.selectedAttributes[attr.name];
+          if (selected) {
+            if (attr.type === 'single') {
+              const selectedOption = attr.options?.find((opt: any) => {
+                const optionName = typeof opt === 'string' ? opt : opt.name;
+                return optionName === selected;
+              });
+
+              if (
+                selectedOption &&
+                typeof selectedOption === 'object' &&
+                selectedOption.price
+              ) {
+                finalPrice += selectedOption.price;
+              }
+            } else if (attr.type === 'multiple') {
+              // Handle comma-separated string from frontend
+              const selectedValues = selected.split(',').map((v) => v.trim());
+              for (const sel of selectedValues) {
+                const selectedOption = attr.options?.find((opt: any) => {
+                  const optionName = typeof opt === 'string' ? opt : opt.name;
+                  return optionName === sel;
+                });
+
+                if (
+                  selectedOption &&
+                  typeof selectedOption === 'object' &&
+                  selectedOption.price
+                ) {
+                  finalPrice += selectedOption.price;
+                }
+              }
+            }
+          }
+        }
+      }
+
       validItems.push({
         productId: item.productId,
         quantity: item.quantity,
-        price: product.price,
+        price: finalPrice,
+        selectedAttributes: item.selectedAttributes || {},
         deliveryTimeUnit: product.deliveryTimeUnit,
         deliveryMinTime: product.deliveryMinTime,
         deliveryMaxTime: product.deliveryMaxTime,
@@ -951,6 +1030,7 @@ export class OrdersService {
       phone,
       customerName,
       status,
+      paymentMethod,
       startDate,
       endDate,
       guestOrdersOnly,
@@ -958,6 +1038,7 @@ export class OrdersService {
       page = 1,
       limit = 20,
     } = searchDto;
+
     const skip = (page - 1) * limit;
 
     const dateFilter: any = {};
@@ -966,6 +1047,7 @@ export class OrdersService {
 
     const baseFilter: any = {
       ...(status && { status }),
+      ...(paymentMethod && { paymentMethod }),
       ...(Object.keys(dateFilter).length > 0 && { createdAt: dateFilter }),
     };
 
@@ -1065,6 +1147,15 @@ export class OrdersService {
         priceAtPurchase: item.priceAtPurchase,
       })),
       ...(isGuest && { shippingAddress: order.shippingAddress }),
+      paymentMethod: order.paymentMethod,
+      paidAt: order.paidAt,
+      stripeSessionId: order.stripeSessionId,
+      paymentIntentId: order.paymentIntentId,
+      stripeAmount: order.stripeAmount,
+      stripeCurrency: order.stripeCurrency,
+      processingFee: order.processingFee,
+      orderSubtotal: order.orderSubtotal,
+      deliveryFee: order.deliveryFee,
     });
 
     const allOrders = [
@@ -1249,6 +1340,15 @@ export class OrdersService {
         shippingAddress: (regularOrder as any).shippingAddress,
         notes: (regularOrder as any).notes || [],
         statusHistory: (regularOrder as any).statusHistory || [],
+        paymentMethod: (regularOrder as any).paymentMethod,
+        paidAt: (regularOrder as any).paidAt,
+        stripeSessionId: (regularOrder as any).stripeSessionId,
+        paymentIntentId: (regularOrder as any).paymentIntentId,
+        stripeAmount: (regularOrder as any).stripeAmount,
+        stripeCurrency: (regularOrder as any).stripeCurrency,
+        processingFee: (regularOrder as any).processingFee,
+        orderSubtotal: (regularOrder as any).orderSubtotal,
+        deliveryFee: (regularOrder as any).deliveryFee,
       };
     }
 
@@ -1286,6 +1386,15 @@ export class OrdersService {
         shippingAddress: guestOrder.shippingAddress,
         notes: (guestOrder as any).notes || [],
         statusHistory: (guestOrder as any).statusHistory || [],
+        paymentMethod: (guestOrder as any).paymentMethod,
+        paidAt: (guestOrder as any).paidAt,
+        stripeSessionId: (guestOrder as any).stripeSessionId,
+        paymentIntentId: (guestOrder as any).paymentIntentId,
+        stripeAmount: (guestOrder as any).stripeAmount,
+        stripeCurrency: (guestOrder as any).stripeCurrency,
+        processingFee: (guestOrder as any).processingFee,
+        orderSubtotal: (guestOrder as any).orderSubtotal,
+        deliveryFee: (guestOrder as any).deliveryFee,
       };
     }
 
@@ -2124,5 +2233,293 @@ export class OrdersService {
       );
       return { cancelledCount, guestCancelledCount };
     }
+  }
+
+  // ============================================================
+  // STRIPE CHECKOUT INTEGRATION
+  // ============================================================
+
+  /**
+   * Calculate Stripe processing fee (2.9% + $0.30 CAD)
+   */
+  private calculateProcessingFee(orderSubtotal: number): number {
+    const fee = orderSubtotal * 0.029 + 0.3;
+    return Math.round(fee * 100) / 100; // Round to 2 decimal places
+  }
+
+  /**
+   * Check if an order is paid (supports both regular and guest orders)
+   */
+  async isOrderPaid(orderId: string): Promise<boolean> {
+    const regularOrder = await this.orderModel.findOne({ orderId }).lean();
+    if (regularOrder) return !!regularOrder.isPaid;
+
+    const guestOrder = await this.guestOrderModel.findOne({ orderId }).lean();
+    return !!guestOrder?.isPaid;
+  }
+
+  /**
+   * Get order by payment intent ID (supports both regular and guest orders)
+   */
+  async getOrderByPaymentIntent(paymentIntentId: string): Promise<{
+    order?: OrderDocument;
+    guestOrder?: GuestOrderDocument;
+  }> {
+    const order = await this.orderModel.findOne({ paymentIntentId });
+    if (order) return { order };
+
+    const guestOrder = await this.guestOrderModel.findOne({ paymentIntentId });
+    return { guestOrder: guestOrder || undefined };
+  }
+
+  /**
+   * Mark order as paid (supports both regular and guest orders)
+   * Called by Stripe webhook after successful payment
+   */
+  async markOrderAsPaid(
+    orderId: string,
+  ): Promise<{ order?: OrderDocument; guestOrder?: GuestOrderDocument }> {
+    return inTransaction(this.connection, async (session) => {
+      // Try regular order first
+      const orderDoc = await this.orderModel
+        .findOne({ orderId })
+        .session(session);
+
+      if (orderDoc) {
+        orderDoc.isPaid = true;
+        orderDoc.paidAt = new Date();
+        orderDoc.status = OrderStatus.CONFIRMED;
+        await orderDoc.save({ session });
+
+        // Send confirmation email
+        await orderDoc.populate('userId', 'firstName lastName email');
+        const user = orderDoc.userId as any;
+        if (user?.email) {
+          const details = this.ordersEmailService.prepareOrderConfirmationData(
+            orderDoc,
+            {
+              firstName: user.firstName,
+              lastName: user.lastName,
+              email: user.email,
+              phone: user.phoneNumber || '',
+            },
+          );
+          await this.ordersEmailService.sendOrderConfirmationEmail(
+            user.email,
+            orderDoc.orderId,
+            details,
+            false,
+          );
+        }
+
+        return { order: orderDoc };
+      }
+
+      // Try guest order
+      const guestDoc = await this.guestOrderModel
+        .findOne({ orderId })
+        .session(session);
+
+      if (guestDoc) {
+        guestDoc.isPaid = true;
+        guestDoc.paidAt = new Date();
+        guestDoc.status = OrderStatus.CONFIRMED;
+        await guestDoc.save({ session });
+
+        // Send confirmation email
+        const details = this.ordersEmailService.prepareOrderConfirmationData(
+          guestDoc,
+          guestDoc.customerInfo,
+        );
+        await this.ordersEmailService.sendOrderConfirmationEmail(
+          guestDoc.customerInfo.email,
+          guestDoc.orderId,
+          details,
+          true,
+        );
+
+        return { guestOrder: guestDoc };
+      }
+
+      this.logger.error(`[markOrderAsPaid] Order not found: ${orderId}`);
+      throw new NotFoundException('Order not found');
+    });
+  }
+
+  /**
+   * Create Stripe checkout session for registered user order
+   */
+  async createCheckoutSessionForOrder(
+    orderId: string,
+    userId: string,
+  ): Promise<{ sessionUrl: string }> {
+    const appUrl = config.cors.appUrl || 'http://localhost:5173';
+    const successUrl = `${appUrl}/payment/success?orderId=${orderId}&session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${appUrl}/payment/cancel`;
+
+    const order = await this.orderModel
+      .findOne({
+        orderId,
+        userId: new Types.ObjectId(userId),
+      })
+      .populate('userId', 'email');
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (order.isPaid) {
+      throw new BadRequestException('Order already paid');
+    }
+
+    if (order.paymentMethod && order.paymentMethod !== PaymentMethod.STRIPE) {
+      this.logger.error(
+        `Payment method mismatch! Expected: ${PaymentMethod.STRIPE}, Got: ${order.paymentMethod}`,
+      );
+      throw new BadRequestException(
+        'Payment method must be Stripe for checkout',
+      );
+    }
+
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new BadRequestException('Order has been cancelled');
+    }
+
+    const user = order.userId as any;
+    const customerEmail = user?.email;
+
+    // Calculate order subtotal, processing fee, delivery fee, and final amount
+    const orderSubtotal = order.items.reduce(
+      (sum, i) => sum + i.priceAtPurchase * i.quantity,
+      0,
+    );
+    const deliveryFee = order.deliveryFee || 0;
+    const processingFee = this.calculateProcessingFee(
+      orderSubtotal + deliveryFee,
+    );
+    const finalAmount = Math.round(
+      (orderSubtotal + deliveryFee + processingFee) * 100,
+    ); // Convert to cents
+
+    // Store fee details in order and update totalAmount to include delivery and processing fees
+    order.orderSubtotal = Math.round(orderSubtotal * 100) / 100;
+    order.deliveryFee = Math.round(deliveryFee * 100) / 100;
+    order.processingFee = processingFee;
+    order.totalAmount =
+      Math.round((orderSubtotal + deliveryFee + processingFee) * 100) / 100;
+    await order.save();
+
+    // Create Stripe checkout session
+    const session = await this.stripeService.createCheckoutSession({
+      amountCents: finalAmount,
+      currency: 'cad',
+      successUrl,
+      cancelUrl,
+      customerEmail,
+      metadata: {
+        orderId: order.orderId,
+        userId: order.userId.toString(),
+      },
+      idempotencyKey: `order_${order.orderId}`,
+    });
+
+    // Store session ID and payment intent ID in order
+    order.stripeSessionId = session.id;
+    order.paymentIntentId = session.payment_intent as string;
+    await order.save();
+
+    if (!session.url) {
+      throw new BadRequestException('Failed to create checkout session URL');
+    }
+
+    return { sessionUrl: session.url };
+  }
+
+  /**
+   * Create Stripe checkout session for guest order
+   */
+  async createGuestCheckoutSession(
+    orderId: string,
+    email: string,
+  ): Promise<{ sessionUrl: string }> {
+    const appUrl = config.cors.appUrl || 'http://localhost:5173';
+    const successUrl = `${appUrl}/payment/success?orderId=${orderId}&email=${encodeURIComponent(email)}&session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${appUrl}/payment/cancel`;
+
+    if (!email) {
+      throw new BadRequestException('Email is required for guest checkout');
+    }
+
+    const order = await this.guestOrderModel.findOne({
+      orderId,
+      'customerInfo.email': email,
+    });
+
+    if (!order) {
+      throw new NotFoundException('Guest order not found');
+    }
+
+    if (order.isPaid) {
+      throw new BadRequestException('Order already paid');
+    }
+
+    if (order.paymentMethod && order.paymentMethod !== PaymentMethod.STRIPE) {
+      this.logger.error(
+        `Payment method mismatch! Expected: ${PaymentMethod.STRIPE}, Got: ${order.paymentMethod}`,
+      );
+      throw new BadRequestException(
+        'Payment method must be Stripe for checkout',
+      );
+    }
+
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new BadRequestException('Order has been cancelled');
+    }
+
+    // Calculate order subtotal, processing fee, delivery fee, and final amount
+    const orderSubtotal = order.items.reduce(
+      (sum, i) => sum + i.priceAtPurchase * i.quantity,
+      0,
+    );
+    const deliveryFee = order.deliveryFee || 0;
+    const processingFee = this.calculateProcessingFee(
+      orderSubtotal + deliveryFee,
+    );
+    const finalAmount = Math.round(
+      (orderSubtotal + deliveryFee + processingFee) * 100,
+    ); // Convert to cents
+
+    // Store fee details in order and update totalAmount to include delivery and processing fees
+    order.orderSubtotal = Math.round(orderSubtotal * 100) / 100;
+    order.deliveryFee = Math.round(deliveryFee * 100) / 100;
+    order.processingFee = processingFee;
+    order.totalAmount =
+      Math.round((orderSubtotal + deliveryFee + processingFee) * 100) / 100;
+    await order.save();
+
+    // Create Stripe checkout session
+    const session = await this.stripeService.createCheckoutSession({
+      amountCents: finalAmount,
+      currency: 'cad',
+      successUrl,
+      cancelUrl,
+      customerEmail: email,
+      metadata: {
+        orderId: order.orderId,
+        guestEmail: email,
+      },
+      idempotencyKey: `guest_order_${order.orderId}`,
+    });
+
+    // Store session ID and payment intent ID in order
+    order.stripeSessionId = session.id;
+    order.paymentIntentId = session.payment_intent as string;
+    await order.save();
+
+    if (!session.url) {
+      throw new BadRequestException('Failed to create checkout session URL');
+    }
+
+    return { sessionUrl: session.url };
   }
 }

@@ -135,82 +135,104 @@ export class DashboardService {
     query: SalesAnalyticsQueryDto,
   ): Promise<SalesAnalyticsDto[]> {
     try {
-      const matchStage: any = { status: { $in: this.PAID_ORDER_STATUSES } };
+      // Calculate date ranges for current and previous periods
+      let currentStart: Date;
+      let currentEnd: Date;
+      let previousStart: Date;
+      let previousEnd: Date;
 
-      // Apply date range filter if provided
-      if (query.startDate || query.endDate) {
-        matchStage.createdAt = {};
-        if (query.startDate) {
-          matchStage.createdAt.$gte = new Date(query.startDate);
-        }
-        if (query.endDate) {
-          matchStage.createdAt.$lte = new Date(query.endDate);
-        }
+      if (query.startDate && query.endDate) {
+        currentStart = new Date(query.startDate);
+        currentEnd = new Date(query.endDate);
+        
+        // Calculate the duration of the current period
+        const durationMs = currentEnd.getTime() - currentStart.getTime();
+        
+        // Previous period ends where current period starts, and has the same duration
+        previousEnd = new Date(currentStart.getTime() - 1); // 1ms before current start
+        previousStart = new Date(previousEnd.getTime() - durationMs);
+      } else {
+        // Default: last 30 days vs previous 30 days
+        currentEnd = new Date();
+        currentStart = new Date(currentEnd.getTime() - 30 * 24 * 60 * 60 * 1000);
+        previousEnd = new Date(currentStart.getTime() - 1);
+        previousStart = new Date(previousEnd.getTime() - 30 * 24 * 60 * 60 * 1000);
       }
 
-      // Aggregate from both Order and GuestOrder collections
-      const orderSales = await this.orderModel.aggregate([
-        { $match: matchStage },
-        {
-          $group: {
-            _id: { $month: '$createdAt' },
-            totalSales: { $sum: '$totalAmount' },
+      // Helper function to get sales by month for a date range
+      const getSalesByMonth = async (startDate: Date, endDate: Date) => {
+        const matchStage = {
+          status: { $in: this.PAID_ORDER_STATUSES },
+          createdAt: { $gte: startDate, $lte: endDate },
+        };
+
+        const orderSales = await this.orderModel.aggregate([
+          { $match: matchStage },
+          {
+            $group: {
+              _id: { $month: '$createdAt' },
+              totalSales: { $sum: '$totalAmount' },
+            },
           },
-        },
-        { $sort: { _id: 1 } },
-      ]);
+        ]);
 
-      const guestOrderSales = await this.guestOrderModel.aggregate([
-        { $match: matchStage },
-        {
-          $group: {
-            _id: { $month: '$createdAt' },
-            totalSales: { $sum: '$totalAmount' },
+        const guestOrderSales = await this.guestOrderModel.aggregate([
+          { $match: matchStage },
+          {
+            $group: {
+              _id: { $month: '$createdAt' },
+              totalSales: { $sum: '$totalAmount' },
+            },
           },
-        },
-        { $sort: { _id: 1 } },
-      ]);
+        ]);
 
-      // Combine sales from both collections
-      const salesByMonth = new Map<number, number>();
+        const salesByMonth = new Map<number, number>();
+        orderSales.forEach((item) => {
+          salesByMonth.set(
+            item._id,
+            (salesByMonth.get(item._id) || 0) + item.totalSales,
+          );
+        });
+        guestOrderSales.forEach((item) => {
+          salesByMonth.set(
+            item._id,
+            (salesByMonth.get(item._id) || 0) + item.totalSales,
+          );
+        });
 
-      orderSales.forEach((item) => {
-        salesByMonth.set(
-          item._id,
-          (salesByMonth.get(item._id) || 0) + item.totalSales,
-        );
-      });
+        return salesByMonth;
+      };
 
-      guestOrderSales.forEach((item) => {
-        salesByMonth.set(
-          item._id,
-          (salesByMonth.get(item._id) || 0) + item.totalSales,
-        );
-      });
+      // Get sales for both periods
+      const currentSales = await getSalesByMonth(currentStart, currentEnd);
+      const previousSales = await getSalesByMonth(previousStart, previousEnd);
 
-      // Convert to response format
+      // Month names
       const monthNames = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
       ];
 
+      // Combine all months that have data in either period
+      const allMonths = new Set([
+        ...Array.from(currentSales.keys()),
+        ...Array.from(previousSales.keys()),
+      ]);
+
       const result: SalesAnalyticsDto[] = [];
-      salesByMonth.forEach((totalSales, monthNumber) => {
+      allMonths.forEach((monthNumber) => {
         result.push({
           month: monthNames[monthNumber - 1],
-          onlineSales: totalSales,
-          shopSales: 0, // Placeholder for future multi-channel support
+          currentPeriod: currentSales.get(monthNumber) || 0,
+          previousPeriod: previousSales.get(monthNumber) || 0,
         });
+      });
+
+      // Sort by month number
+      result.sort((a, b) => {
+        const aIndex = monthNames.indexOf(a.month);
+        const bIndex = monthNames.indexOf(b.month);
+        return aIndex - bIndex;
       });
 
       return result;

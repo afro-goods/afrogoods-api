@@ -14,6 +14,9 @@ export class OrderItem {
   @Prop({ type: Number, required: true })
   priceAtPurchase: number;
 
+  @Prop({ type: Object, default: {} })
+  selectedAttributes?: Record<string, string>;
+
   @Prop({ type: String, enum: DeliveryTimeUnit })
   deliveryTimeUnit?: DeliveryTimeUnit;
 

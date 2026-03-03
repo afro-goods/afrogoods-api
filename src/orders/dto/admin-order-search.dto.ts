@@ -40,6 +40,10 @@ export class AdminOrderSearchDto {
   status?: OrderStatus;
 
   @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+
+  @IsOptional()
   @IsDateString()
   startDate?: string;
 
@@ -146,7 +150,20 @@ export class AdminOrderResponseDto {
     state: string;
     postalCode: string;
     country: string;
+    apartment?: string;
+    instructions?: string;
   };
+
+  // Payment information
+  paymentMethod?: string;
+  paidAt?: Date;
+  stripeSessionId?: string;
+  paymentIntentId?: string;
+  stripeAmount?: number;
+  stripeCurrency?: string;
+  processingFee?: number;
+  orderSubtotal?: number;
+  deliveryFee?: number;
 
   // Notes and history
   notes?: OrderNoteDto[];

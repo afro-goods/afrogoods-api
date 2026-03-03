@@ -96,7 +96,6 @@ export class AdvertsService {
     // Validate that the category exists and is of type 'advert'
     await this.validateAdvertCategory(category);
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const {
       startDate: _startDate,
       endDate: _endDate,

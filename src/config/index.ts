@@ -23,6 +23,9 @@ interface EnvVars {
 
   APP_URL?: string;
   ADMIN_DASHBOARD_URL?: string;
+
+  STRIPE_SECRET_KEY: string;
+  STRIPE_WEBHOOK_SECRET: string;
 }
 
 const schema = joi
@@ -52,6 +55,9 @@ const schema = joi
 
     APP_URL: joi.string().uri().optional(),
     ADMIN_DASHBOARD_URL: joi.string().uri().optional(),
+
+    STRIPE_SECRET_KEY: joi.string().required(),
+    STRIPE_WEBHOOK_SECRET: joi.string().required(),
   })
   .unknown(true);
 
@@ -103,5 +109,9 @@ export const config = {
   cors: {
     appUrl: env.APP_URL,
     adminDashboardUrl: env.ADMIN_DASHBOARD_URL,
+  },
+  stripe: {
+    secretKey: env.STRIPE_SECRET_KEY,
+    webhookSecret: env.STRIPE_WEBHOOK_SECRET,
   },
 };

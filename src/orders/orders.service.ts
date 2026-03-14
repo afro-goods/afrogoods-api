@@ -2355,7 +2355,7 @@ export class OrdersService {
   ): Promise<{ sessionUrl: string }> {
     const appUrl = config.cors.appUrl || 'http://localhost:5173';
     const successUrl = `${appUrl}/payment/success?orderId=${orderId}&session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = `${appUrl}/payment/cancel`;
+    const cancelUrl = `${appUrl}/payment/cancel?orderId=${orderId}`;
 
     const order = await this.orderModel
       .findOne({
@@ -2444,7 +2444,7 @@ export class OrdersService {
   ): Promise<{ sessionUrl: string }> {
     const appUrl = config.cors.appUrl || 'http://localhost:5173';
     const successUrl = `${appUrl}/payment/success?orderId=${orderId}&email=${encodeURIComponent(email)}&session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = `${appUrl}/payment/cancel`;
+    const cancelUrl = `${appUrl}/payment/cancel?orderId=${orderId}&email=${encodeURIComponent(email)}`;
 
     if (!email) {
       throw new BadRequestException('Email is required for guest checkout');

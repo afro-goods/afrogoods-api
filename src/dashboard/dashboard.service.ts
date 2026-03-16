@@ -135,6 +135,8 @@ export class DashboardService {
     query: SalesAnalyticsQueryDto,
   ): Promise<SalesAnalyticsDto[]> {
     try {
+      const groupBy = query.groupBy || 'month';
+
       // Calculate date ranges for current and previous periods
       let currentStart: Date;
       let currentEnd: Date;
@@ -144,96 +146,105 @@ export class DashboardService {
       if (query.startDate && query.endDate) {
         currentStart = new Date(query.startDate);
         currentEnd = new Date(query.endDate);
-        
-        // Calculate the duration of the current period
         const durationMs = currentEnd.getTime() - currentStart.getTime();
-        
-        // Previous period ends where current period starts, and has the same duration
-        previousEnd = new Date(currentStart.getTime() - 1); // 1ms before current start
+        previousEnd = new Date(currentStart.getTime() - 1);
         previousStart = new Date(previousEnd.getTime() - durationMs);
+      } else if (groupBy === 'day') {
+        // Default for daily: last 7 days vs previous 7 days
+        currentEnd = new Date();
+        currentStart = new Date(currentEnd.getTime() - 7 * 24 * 60 * 60 * 1000);
+        previousEnd = new Date(currentStart.getTime() - 1);
+        previousStart = new Date(previousEnd.getTime() - 7 * 24 * 60 * 60 * 1000);
       } else {
-        // Default: last 30 days vs previous 30 days
+        // Default for monthly: last 30 days vs previous 30 days
         currentEnd = new Date();
         currentStart = new Date(currentEnd.getTime() - 30 * 24 * 60 * 60 * 1000);
         previousEnd = new Date(currentStart.getTime() - 1);
         previousStart = new Date(previousEnd.getTime() - 30 * 24 * 60 * 60 * 1000);
       }
 
-      // Helper function to get sales by month for a date range
-      const getSalesByMonth = async (startDate: Date, endDate: Date) => {
+      const getSales = async (startDate: Date, endDate: Date) => {
         const matchStage = {
           status: { $in: this.PAID_ORDER_STATUSES },
           createdAt: { $gte: startDate, $lte: endDate },
         };
 
-        const orderSales = await this.orderModel.aggregate([
-          { $match: matchStage },
-          {
-            $group: {
-              _id: { $month: '$createdAt' },
-              totalSales: { $sum: '$totalAmount' },
-            },
-          },
+        const groupId =
+          groupBy === 'day'
+            ? { year: { $year: '$createdAt' }, month: { $month: '$createdAt' }, day: { $dayOfMonth: '$createdAt' } }
+            : { month: { $month: '$createdAt' } };
+
+        const [orderSales, guestOrderSales] = await Promise.all([
+          this.orderModel.aggregate([
+            { $match: matchStage },
+            { $group: { _id: groupId, totalSales: { $sum: '$totalAmount' } } },
+          ]),
+          this.guestOrderModel.aggregate([
+            { $match: matchStage },
+            { $group: { _id: groupId, totalSales: { $sum: '$totalAmount' } } },
+          ]),
         ]);
 
-        const guestOrderSales = await this.guestOrderModel.aggregate([
-          { $match: matchStage },
-          {
-            $group: {
-              _id: { $month: '$createdAt' },
-              totalSales: { $sum: '$totalAmount' },
-            },
-          },
-        ]);
+        const salesMap = new Map<string, number>();
+        const toKey = (id: any) =>
+          groupBy === 'day'
+            ? `${id.year}-${String(id.month).padStart(2, '0')}-${String(id.day).padStart(2, '0')}`
+            : String(id.month);
 
-        const salesByMonth = new Map<number, number>();
-        orderSales.forEach((item) => {
-          salesByMonth.set(
-            item._id,
-            (salesByMonth.get(item._id) || 0) + item.totalSales,
-          );
-        });
-        guestOrderSales.forEach((item) => {
-          salesByMonth.set(
-            item._id,
-            (salesByMonth.get(item._id) || 0) + item.totalSales,
-          );
+        [...orderSales, ...guestOrderSales].forEach((item) => {
+          const key = toKey(item._id);
+          salesMap.set(key, (salesMap.get(key) || 0) + item.totalSales);
         });
 
-        return salesByMonth;
+        return salesMap;
       };
 
-      // Get sales for both periods
-      const currentSales = await getSalesByMonth(currentStart, currentEnd);
-      const previousSales = await getSalesByMonth(previousStart, previousEnd);
-
-      // Month names
-      const monthNames = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-      ];
-
-      // Combine all months that have data in either period
-      const allMonths = new Set([
-        ...Array.from(currentSales.keys()),
-        ...Array.from(previousSales.keys()),
+      const [currentSales, previousSales] = await Promise.all([
+        getSales(currentStart, currentEnd),
+        getSales(previousStart, previousEnd),
       ]);
 
       const result: SalesAnalyticsDto[] = [];
-      allMonths.forEach((monthNumber) => {
-        result.push({
-          month: monthNames[monthNumber - 1],
-          currentPeriod: currentSales.get(monthNumber) || 0,
-          previousPeriod: previousSales.get(monthNumber) || 0,
-        });
-      });
 
-      // Sort by month number
-      result.sort((a, b) => {
-        const aIndex = monthNames.indexOf(a.month);
-        const bIndex = monthNames.indexOf(b.month);
-        return aIndex - bIndex;
-      });
+      if (groupBy === 'day') {
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        // Generate all days in the current period
+        const days: string[] = [];
+        const cursor = new Date(currentStart);
+        while (cursor <= currentEnd) {
+          const key = cursor.toISOString().slice(0, 10); // YYYY-MM-DD
+          days.push(key);
+          cursor.setDate(cursor.getDate() + 1);
+        }
+
+        days.forEach((dateKey) => {
+          const date = new Date(dateKey);
+          const dayNum = date.getUTCDate();
+          const dayName = dayNames[date.getUTCDay()];
+          const label = `${dayNum} ${dayName}`;
+          // Map previous period: same offset from its start
+          const offsetMs = new Date(dateKey).getTime() - currentStart.getTime();
+          const prevDate = new Date(previousStart.getTime() + offsetMs);
+          const prevKey = prevDate.toISOString().slice(0, 10);
+
+          result.push({
+            month: label,
+            currentPeriod: currentSales.get(dateKey) || 0,
+            previousPeriod: previousSales.get(prevKey) || 0,
+          });
+        });
+      } else {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const allMonths = new Set([...currentSales.keys(), ...previousSales.keys()]);
+        allMonths.forEach((key) => {
+          result.push({
+            month: monthNames[parseInt(key) - 1],
+            currentPeriod: currentSales.get(key) || 0,
+            previousPeriod: previousSales.get(key) || 0,
+          });
+        });
+        result.sort((a, b) => monthNames.indexOf(a.month) - monthNames.indexOf(b.month));
+      }
 
       return result;
     } catch (error) {

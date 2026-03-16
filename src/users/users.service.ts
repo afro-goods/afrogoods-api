@@ -86,6 +86,22 @@ export class UsersService {
       .exec();
   }
 
+  async recordAdminLogin(firebaseUid: string): Promise<void> {
+    const user = await this.userModel.findOne({ firebaseUid }).exec();
+    if (!user) return;
+
+    const previousLoginAt = user.lastLogin ?? null;
+    await this.userModel
+      .findOneAndUpdate(
+        { firebaseUid },
+        {
+          adminPreviousLoginAt: previousLoginAt,
+          lastLogin: new Date(),
+        },
+      )
+      .exec();
+  }
+
   async verifyEmail(firebaseUid: string): Promise<User> {
     const user = await this.userModel
       .findOneAndUpdate({ firebaseUid }, { emailVerified: true }, { new: true })

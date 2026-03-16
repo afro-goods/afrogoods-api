@@ -1,4 +1,4 @@
-import { IsOptional, IsDateString } from 'class-validator';
+import { IsOptional, IsDateString, IsIn } from 'class-validator';
 
 export class SalesAnalyticsQueryDto {
   @IsOptional()
@@ -8,4 +8,8 @@ export class SalesAnalyticsQueryDto {
   @IsOptional()
   @IsDateString()
   endDate?: string;
+
+  @IsOptional()
+  @IsIn(['day', 'month'])
+  groupBy?: 'day' | 'month';
 }

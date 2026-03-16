@@ -37,6 +37,9 @@ export class User extends Document {
   @Prop({ type: Date })
   lastLogin?: Date;
 
+  @Prop({ type: Date })
+  adminPreviousLoginAt?: Date;
+
   @Prop({ type: Object })
   metadata?: Record<string, any>;
 

@@ -6,6 +6,7 @@ import {
   Inject,
 } from '@nestjs/common';
 import { UsersService } from 'src/users/users.service';
+import { UserRole } from 'src/users/enum/user.enum';
 import * as admin from 'firebase-admin';
 
 @Injectable()
@@ -33,6 +34,20 @@ export class FirebaseAuthGuard implements CanActivate {
 
       if (!user) {
         throw new UnauthorizedException('User not found in database');
+      }
+
+      if (user.role === UserRole.ADMIN) {
+        const previousLoginAt = (user as any).adminPreviousLoginAt as
+          | Date
+          | undefined;
+        if (previousLoginAt) {
+          const previousLoginAtSeconds = previousLoginAt.getTime() / 1000;
+          if (decodedToken.iat < previousLoginAtSeconds) {
+            throw new UnauthorizedException(
+              'Session has been invalidated. Please log in again.',
+            );
+          }
+        }
       }
 
       request.user = user;

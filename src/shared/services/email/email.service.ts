@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { config } from '../../../config';
 import { ResendProvider } from './resend.provider';
 import { EmailTemplateService } from './services/email-template.service';
 import {
@@ -19,9 +20,8 @@ import {
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private readonly APP_NAME = 'AfroGoods';
-  private readonly APP_URL = process.env.APP_URL || 'https://afrogoods.com';
-  private readonly ADMIN_DASHBOARD_URL =
-    process.env.ADMIN_DASHBOARD_URL || 'https://admin.afrogoods.com';
+  private readonly APP_URL = config.cors.appUrl;
+  private readonly ADMIN_DASHBOARD_URL = config.cors.adminDashboardUrl;
 
   constructor(
     private readonly resendProvider: ResendProvider,

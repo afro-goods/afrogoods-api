@@ -236,8 +236,79 @@ export class AdvertsService {
     if (isAdminQuery) {
       if (query.status) filter.status = query.status;
     } else {
-      // Public users only see APPROVED adverts
       filter.status = AdvertStatus.APPROVED;
+    }
+
+    // If search is provided, use aggregation to filter by owner name/email
+    if (query.search && query.search.trim()) {
+      const search = query.search.trim();
+      const page = query.page ?? 1;
+      const limit = query.limit ?? 20;
+      const skip = (page - 1) * limit;
+
+      const pipeline: any[] = [
+        { $match: filter },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'owner',
+            foreignField: '_id',
+            as: 'ownerData',
+          },
+        },
+        { $unwind: { path: '$ownerData', preserveNullAndEmptyArrays: true } },
+        {
+          $match: {
+            $or: [
+              { 'ownerData.email': { $regex: search, $options: 'i' } },
+              { 'ownerData.firstName': { $regex: search, $options: 'i' } },
+              { 'ownerData.lastName': { $regex: search, $options: 'i' } },
+              { title: { $regex: search, $options: 'i' } },
+            ],
+          },
+        },
+      ];
+
+      const [countResult, data] = await Promise.all([
+        this.advertModel.aggregate([...pipeline, { $count: 'total' }]),
+        this.advertModel.aggregate([
+          ...pipeline,
+          { $sort: { createdAt: -1 } },
+          { $skip: skip },
+          { $limit: limit },
+          // Re-populate category and reviewedBy via lookup
+          {
+            $lookup: {
+              from: 'categories',
+              localField: 'category',
+              foreignField: '_id',
+              as: 'category',
+            },
+          },
+          { $unwind: { path: '$category', preserveNullAndEmptyArrays: true } },
+          {
+            $lookup: {
+              from: 'users',
+              localField: 'reviewedBy',
+              foreignField: '_id',
+              as: 'reviewedBy',
+            },
+          },
+          { $unwind: { path: '$reviewedBy', preserveNullAndEmptyArrays: true } },
+          // Map ownerData back to owner field
+          { $addFields: { owner: '$ownerData' } },
+          { $project: { ownerData: 0 } },
+        ]),
+      ]);
+
+      const total = countResult[0]?.total || 0;
+      return {
+        data,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      };
     }
 
     return this.paginationService.paginate(this.advertModel, {

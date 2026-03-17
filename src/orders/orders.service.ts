@@ -1051,63 +1051,81 @@ export class OrdersService {
       ...(Object.keys(dateFilter).length > 0 && { createdAt: dateFilter }),
     };
 
+    const regularBaseFilter: any = {
+      ...baseFilter,
+      ...(orderId && { orderId: { $regex: orderId, $options: 'i' } }),
+    };
+    const guestBaseFilter: any = {
+      ...baseFilter,
+      ...(orderId && { orderId: { $regex: orderId, $options: 'i' } }),
+      ...(email && { 'customerInfo.email': { $regex: email, $options: 'i' } }),
+      ...(phone && { 'customerInfo.phone': { $regex: phone, $options: 'i' } }),
+      ...(customerName && {
+        $or: [
+          { 'customerInfo.firstName': { $regex: customerName, $options: 'i' } },
+          { 'customerInfo.lastName': { $regex: customerName, $options: 'i' } },
+        ],
+      }),
+    };
+
     let regularOrders: any[] = [];
     if (!guestOrdersOnly) {
-      // Build the filter for regular orders
-      const regularOrderFilter: any = {
-        ...baseFilter,
-        ...(orderId && { orderId: { $regex: orderId, $options: 'i' } }),
-      };
-
-      // Add userId filter - convert string to ObjectId for MongoDB query
+      // Add userId filter if provided
       if (userId) {
         try {
-          regularOrderFilter.userId = new Types.ObjectId(userId);
+          regularBaseFilter.userId = new Types.ObjectId(userId);
         } catch {
-          // If invalid ObjectId format, use as-is (will return no results)
-          regularOrderFilter.userId = userId;
+          regularBaseFilter.userId = userId;
         }
       }
 
-      regularOrders = await this.orderModel
-        .find(regularOrderFilter)
-        .populate('userId', 'firstName lastName email phone')
-        .populate('items.productId', 'name price images')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean();
+      // If filtering by email or customerName, use aggregation to join user data
+      if (email || customerName) {
+        const pipeline: any[] = [
+          { $match: regularBaseFilter },
+          {
+            $lookup: {
+              from: 'users',
+              localField: 'userId',
+              foreignField: '_id',
+              as: 'userId',
+            },
+          },
+          { $unwind: { path: '$userId', preserveNullAndEmptyArrays: true } },
+        ];
+
+        const userFilter: any[] = [];
+        if (email) {
+          userFilter.push({ 'userId.email': { $regex: email, $options: 'i' } });
+        }
+        if (customerName) {
+          userFilter.push(
+            { 'userId.firstName': { $regex: customerName, $options: 'i' } },
+            { 'userId.lastName': { $regex: customerName, $options: 'i' } },
+          );
+        }
+        pipeline.push({ $match: { $or: userFilter } });
+        pipeline.push({ $sort: { createdAt: -1 } });
+        pipeline.push({ $skip: skip });
+        pipeline.push({ $limit: limit });
+
+        regularOrders = await this.orderModel.aggregate(pipeline);
+      } else {
+        regularOrders = await this.orderModel
+          .find(regularBaseFilter)
+          .populate('userId', 'firstName lastName email phone')
+          .populate('items.productId', 'name price images')
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean();
+      }
     }
 
     let guestOrders: any[] = [];
     if (!registeredOrdersOnly) {
       guestOrders = await this.guestOrderModel
-        .find({
-          ...baseFilter,
-          ...(orderId && { orderId: { $regex: orderId, $options: 'i' } }),
-          ...(email && {
-            'customerInfo.email': { $regex: email, $options: 'i' },
-          }),
-          ...(phone && {
-            'customerInfo.phone': { $regex: phone, $options: 'i' },
-          }),
-          ...(customerName && {
-            $or: [
-              {
-                'customerInfo.firstName': {
-                  $regex: customerName,
-                  $options: 'i',
-                },
-              },
-              {
-                'customerInfo.lastName': {
-                  $regex: customerName,
-                  $options: 'i',
-                },
-              },
-            ],
-          }),
-        })
+        .find(guestBaseFilter)
         .populate('items.productId', 'name price images')
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -1168,11 +1186,42 @@ export class OrdersService {
       )
       .slice(0, limit);
 
+    const getRegularCount = async () => {
+      if (guestOrdersOnly) return 0;
+      if (email || customerName) {
+        const userFilter: any[] = [];
+        if (email)
+          userFilter.push({ 'userId.email': { $regex: email, $options: 'i' } });
+        if (customerName) {
+          userFilter.push(
+            { 'userId.firstName': { $regex: customerName, $options: 'i' } },
+            { 'userId.lastName': { $regex: customerName, $options: 'i' } },
+          );
+        }
+        const result = await this.orderModel.aggregate([
+          { $match: regularBaseFilter },
+          {
+            $lookup: {
+              from: 'users',
+              localField: 'userId',
+              foreignField: '_id',
+              as: 'userId',
+            },
+          },
+          { $unwind: { path: '$userId', preserveNullAndEmptyArrays: true } },
+          { $match: { $or: userFilter } },
+          { $count: 'total' },
+        ]);
+        return result[0]?.total || 0;
+      }
+      return this.orderModel.countDocuments(regularBaseFilter);
+    };
+
     const [regularCount, guestCount] = await Promise.all([
-      guestOrdersOnly ? 0 : this.orderModel.countDocuments(baseFilter),
+      getRegularCount(),
       registeredOrdersOnly
         ? 0
-        : this.guestOrderModel.countDocuments(baseFilter),
+        : this.guestOrderModel.countDocuments(guestBaseFilter),
     ]);
 
     return {

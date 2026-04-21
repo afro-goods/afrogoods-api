@@ -24,7 +24,6 @@ import { UpdateShippingAddressDto } from './dto/update-shipping-address.dto';
 import { CancelOrderDto } from './dto/cancel-order.dto';
 import { UpdateFulfillmentStatusDto } from './dto/update-fulfillment-status.dto';
 import { UpdateFulfillmentTrackingDto } from './dto/update-fulfillment-tracking.dto';
-import { GuestStripeCheckoutDto } from './dto/guest-stripe-checkout.dto';
 
 @Controller('orders')
 export class OrdersController {
@@ -45,6 +44,8 @@ export class OrdersController {
       userId,
       createOrderDto.shippingAddress,
       createOrderDto.billingAddress,
+      createOrderDto.paymentMethod,
+      createOrderDto.deliveryFee,
     );
   }
 
@@ -103,14 +104,14 @@ export class OrdersController {
     return this.ordersService.addCustomerNote(orderId, userId, noteDto.content);
   }
 
-  /** POST /orders/:id/stripe-checkout-session - Get Stripe Checkout URL for registered order */
-  @Post(':id/stripe-checkout-session')
+  /** POST /orders/:orderId/checkout - Create Stripe checkout session */
+  @Post(':orderId/checkout')
   @UseGuards(FirebaseAuthGuard)
-  createStripeCheckoutSession(
-    @Param('id') orderId: string,
+  createCheckoutSession(
+    @Param('orderId') orderId: string,
     @CurrentUser('_id') userId: string,
   ) {
-    return this.ordersService.createStripeCheckoutSession(orderId, userId);
+    return this.ordersService.createCheckoutSessionForOrder(orderId, userId);
   }
 
   /** POST /orders/:id/mock-pay - Mock payment for testing */
@@ -123,18 +124,6 @@ export class OrdersController {
   @Post('guest/:id/mock-pay')
   mockPayOrder(@Param('id') id: string) {
     return this.ordersService.mockPayGuest(id);
-  }
-
-  /** POST /orders/guest/:id/stripe-checkout-session - Get Stripe Checkout URL for guest order */
-  @Post('guest/:id/stripe-checkout-session')
-  createGuestStripeCheckoutSession(
-    @Param('id') orderId: string,
-    @Body() dto: GuestStripeCheckoutDto,
-  ) {
-    return this.ordersService.createGuestStripeCheckoutSession(
-      orderId,
-      dto.email,
-    );
   }
 
   // ============================================================
@@ -193,6 +182,17 @@ export class OrdersController {
       noteDto.email,
       noteDto.content,
     );
+  }
+
+  /** POST /orders/guest/:orderId/checkout - Create Stripe checkout session for guest */
+  @Post('guest/:orderId/checkout')
+  async createGuestCheckoutSession(
+    @Param('orderId') orderId: string,
+    @Body() body: { email: string },
+    @Query('email') emailFromQuery?: string,
+  ) {
+    const email: string = body?.email || emailFromQuery || '';
+    return this.ordersService.createGuestCheckoutSession(orderId, email);
   }
 
   // ============================================================

@@ -2,7 +2,8 @@ import * as fc from 'fast-check';
 import axios from 'axios';
 import { CaptchaService } from './captcha.service';
 import { config } from '../../../config';
-import { Test, TestingModule } from '@nestjs/testing';
+import type { TestingModule } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
 
 jest.mock('axios');
 jest.mock('../../../config', () => ({
@@ -37,7 +38,7 @@ describe('CaptchaService Property Tests', () => {
     await fc.assert(
       fc.asyncProperty(
         fc.string({ minLength: 1 }), // token
-        fc.option(fc.ipV4()),        // optional remoteIp
+        fc.option(fc.ipV4()), // optional remoteIp
         async (token, remoteIp) => {
           jest.clearAllMocks();
           mockedAxios.post.mockResolvedValue({ data: { success: true } });
@@ -55,8 +56,8 @@ describe('CaptchaService Property Tests', () => {
               },
             },
           );
-        }
-      )
+        },
+      ),
     );
   });
 });

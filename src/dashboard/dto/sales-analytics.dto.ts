@@ -1,5 +1,5 @@
 export class SalesAnalyticsDto {
   month: string;
-  onlineSales: number;
-  shopSales: number;
+  currentPeriod: number;
+  previousPeriod: number;
 }

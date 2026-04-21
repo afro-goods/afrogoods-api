@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { DeliverySettings, DeliverySettingsDocument } from './schemas/delivery-settings.schema';
+import {
+  DeliverySettings,
+  DeliverySettingsDocument,
+} from './schemas/delivery-settings.schema';
 import { UpdateDeliverySettingsDto } from './dto/update-delivery-settings.dto';
 import { EncryptionService } from '../../shared/services/encryption/encryption.service';
 
@@ -30,7 +33,9 @@ export class DeliverySettingsService {
     const result = settings.toObject();
     if (result.calendlyApiTokenEncrypted) {
       try {
-        result.calendlyApiTokenEncrypted = this.encryptionService.decrypt(result.calendlyApiTokenEncrypted);
+        result.calendlyApiTokenEncrypted = this.encryptionService.decrypt(
+          result.calendlyApiTokenEncrypted,
+        );
       } catch (error) {
         this.logger.error('Failed to decrypt Calendly API token', error.stack);
         result.calendlyApiTokenEncrypted = '';
@@ -39,26 +44,37 @@ export class DeliverySettingsService {
     return result;
   }
 
-  async updateSettings(updateDto: UpdateDeliverySettingsDto): Promise<DeliverySettings> {
+  async updateSettings(
+    updateDto: UpdateDeliverySettingsDto,
+  ): Promise<DeliverySettings> {
     const updateData: any = { ...updateDto };
 
     if (updateDto.calendlyApiToken) {
-      updateData.calendlyApiTokenEncrypted = this.encryptionService.encrypt(updateDto.calendlyApiToken);
+      updateData.calendlyApiTokenEncrypted = this.encryptionService.encrypt(
+        updateDto.calendlyApiToken,
+      );
       delete updateData.calendlyApiToken;
     }
 
-    const settings = await this.deliverySettingsModel.findOneAndUpdate(
-      {},
-      { $set: updateData },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    ).exec();
+    const settings = await this.deliverySettingsModel
+      .findOneAndUpdate(
+        {},
+        { $set: updateData },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      )
+      .exec();
 
     const result = settings.toObject();
     if (result.calendlyApiTokenEncrypted) {
       try {
-        result.calendlyApiTokenEncrypted = this.encryptionService.decrypt(result.calendlyApiTokenEncrypted);
+        result.calendlyApiTokenEncrypted = this.encryptionService.decrypt(
+          result.calendlyApiTokenEncrypted,
+        );
       } catch (error) {
-        this.logger.error('Failed to decrypt Calendly API token after update', error.stack);
+        this.logger.error(
+          'Failed to decrypt Calendly API token after update',
+          error.stack,
+        );
         result.calendlyApiTokenEncrypted = '';
       }
     }

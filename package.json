@@ -10,7 +10,6 @@
     "build:render": "NODE_OPTIONS=--max-old-space-size=2048 nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
-    "dev": "nest start --watch",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "NODE_OPTIONS=--max-old-space-size=512 node dist/src/main.js",
@@ -23,9 +22,7 @@
     "migrate:attributes": "tsx src/scripts/migrate-product-attributes.ts",
     "test:advert-email": "node scripts/test-advert-email.js",
     "test:advert-reviewed-email": "node scripts/test-advert-reviewed-email.js",
-    "promote-admin": "node scripts/promote-user-to-admin.js",
-    "test:firebase-token": "node scripts/get-firebase-id-token.js",
-    "seed:product": "node scripts/seed-product.js"
+    "promote-admin": "node scripts/promote-user-to-admin.js"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",

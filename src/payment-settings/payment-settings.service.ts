@@ -24,8 +24,8 @@ export class PaymentSettingsService {
         eTransferEmail: 'admin@afrogoods.com', // Default value
         whatsappNumber: '1234567890', // Default value
         paymentInstructions: 'Please send e-transfer to the email above.',
-        expressDeliveryFee: 15.00, // Default express delivery fee
-        standardDeliveryFee: 8.00, // Default standard delivery fee
+        expressDeliveryFee: 15.0, // Default express delivery fee
+        standardDeliveryFee: 8.0, // Default standard delivery fee
         currency: 'CAD', // Default currency
         advertDurationDays: 30, // Default advert duration
       });

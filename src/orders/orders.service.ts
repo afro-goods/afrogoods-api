@@ -37,9 +37,10 @@ import {
   generateTrackingUrl as generateCarrierTrackingUrl,
 } from './enums/shipping-carrier.enum';
 import { AvailabilityStatus } from 'src/product/enums/availabilty-status.enum';
-import { StripeService } from '../shared/stripe/stripe.service';
-import { config } from '../config';
 import type { Address } from './interfaces/order.interface';
+import { StripeService } from '../shared/services/stripe/stripe.service';
+import { PaymentMethod } from './enums/payment-method.enum';
+import { config } from '../config';
 
 @Injectable()
 export class OrdersService {
@@ -60,7 +61,7 @@ export class OrdersService {
     private readonly usersService: UsersService,
     private readonly paymentSettingsService: PaymentSettingsService,
     private readonly stripeService: StripeService,
-  ) { }
+  ) {}
 
   // ============================================================
   // BUSINESS RULES CONFIGURATION
@@ -166,6 +167,7 @@ export class OrdersService {
       productId: any;
       quantity: number;
       priceAtAddedTime: number;
+      selectedAttributes?: Record<string, any>;
       deliveryTimeUnit?: DeliveryTimeUnit;
       deliveryMinTime?: number;
       deliveryMaxTime?: number;
@@ -193,6 +195,7 @@ export class OrdersService {
         productId: item.productId,
         quantity: item.quantity,
         priceAtAddedTime: item.priceAtAddedTime,
+        selectedAttributes: item.selectedAttributes || {},
         deliveryTimeUnit: productData.deliveryTimeUnit,
         deliveryMinTime: productData.deliveryMinTime,
         deliveryMaxTime: productData.deliveryMaxTime,
@@ -279,6 +282,8 @@ export class OrdersService {
     userId: string,
     shippingAddress?: Address,
     billingAddress?: Address,
+    paymentMethod?: PaymentMethod,
+    deliveryFee?: number,
   ): Promise<OrderDocument> {
     const recentOrder = await this.orderModel
       .findOne({
@@ -310,6 +315,7 @@ export class OrdersService {
         productId: new Types.ObjectId(item.productId),
         quantity: item.quantity,
         priceAtPurchase: item.priceAtAddedTime,
+        selectedAttributes: item.selectedAttributes || {},
         deliveryTimeUnit: item.deliveryTimeUnit,
         deliveryMinTime: item.deliveryMinTime,
         deliveryMaxTime: item.deliveryMaxTime,
@@ -321,6 +327,11 @@ export class OrdersService {
           orderItems as any,
         );
 
+      // Calculate total amount including delivery fee
+      const orderSubtotal = cart.totalAmount;
+      const orderDeliveryFee = deliveryFee || 0;
+      const totalAmount = orderSubtotal + orderDeliveryFee;
+
       const [order] = await this.orderModel.create(
         [
           {
@@ -328,9 +339,12 @@ export class OrdersService {
             userId: new Types.ObjectId(userId),
             items: orderItems,
             fulfillments,
-            totalAmount: cart.totalAmount,
+            orderSubtotal: orderSubtotal,
+            totalAmount: totalAmount,
             status: OrderStatus.PENDING,
             isPaid: false,
+            paymentMethod: paymentMethod || PaymentMethod.E_TRANSFER,
+            deliveryFee: orderDeliveryFee,
             shippingAddress,
             billingAddress,
             notes: [],
@@ -350,6 +364,8 @@ export class OrdersService {
       cart.items = [];
       cart.totalAmount = 0;
       await cart.save({ session });
+
+      this.logger.log(`Order created: ${order.orderId}`);
 
       await order.populate([
         { path: 'userId', select: 'firstName lastName email phone' },
@@ -423,68 +439,6 @@ export class OrdersService {
       .populate('items.productId', 'name price images');
     if (!order) throw new NotFoundException('Order not found');
     return order;
-  }
-
-  /**
-   * Create Stripe Checkout Session for a registered user's order.
-   * Returns { url } for frontend redirect. Order must be PENDING and unpaid.
-   */
-  async createStripeCheckoutSession(
-    orderId: string,
-    userId: string,
-  ): Promise<{ url: string }> {
-    const order = await this.orderModel.findOne({ orderId, userId });
-    if (!order) throw new NotFoundException('Order not found');
-    if (order.isPaid) {
-      throw new BadRequestException('Order is already paid');
-    }
-    if (order.status !== OrderStatus.PENDING) {
-      throw new BadRequestException(
-        `Cannot pay order with status: ${order.status}`,
-      );
-    }
-    const appUrl = config.app.url;
-    const totalAmountCents = Math.round(order.totalAmount * 100);
-    return this.stripeService.createCheckoutSession({
-      orderId: order.orderId,
-      totalAmountCents,
-      successUrl: `${appUrl}/orders/${order.orderId}`,
-      cancelUrl: `${appUrl}/checkout`,
-      isGuest: false,
-    });
-  }
-
-  /**
-   * Create Stripe Checkout Session for a guest order.
-   * Email must match the order's customerInfo.email.
-   */
-  async createGuestStripeCheckoutSession(
-    orderId: string,
-    email: string,
-  ): Promise<{ url: string }> {
-    const order = await this.guestOrderModel.findOne({
-      orderId,
-      'customerInfo.email': email,
-    });
-    if (!order) throw new NotFoundException('Order not found');
-    if (order.isPaid) {
-      throw new BadRequestException('Order is already paid');
-    }
-    if (order.status !== OrderStatus.PENDING) {
-      throw new BadRequestException(
-        `Cannot pay order with status: ${order.status}`,
-      );
-    }
-    const appUrl = config.app.url;
-    const totalAmountCents = Math.round(order.totalAmount * 100);
-    return this.stripeService.createCheckoutSession({
-      orderId: order.orderId,
-      totalAmountCents,
-      successUrl: `${appUrl}/track-order?orderId=${encodeURIComponent(order.orderId)}&email=${encodeURIComponent(email)}`,
-      cancelUrl: `${appUrl}/checkout`,
-      customerEmail: email,
-      isGuest: true,
-    });
   }
 
   /** Cancel order for registered user (with transaction) */
@@ -661,16 +615,21 @@ export class OrdersService {
       const validItems = await this.validateGuestItems(dto.items, session);
       await this.reduceStock(validItems, session);
 
-      const totalAmount = validItems.reduce(
+      const orderSubtotal = validItems.reduce(
         (sum, item) => sum + item.price * item.quantity,
         0,
       );
+
+      // Calculate total amount including delivery fee
+      const orderDeliveryFee = dto.deliveryFee || 0;
+      const totalAmount = orderSubtotal + orderDeliveryFee;
 
       // Create order items with delivery timeline captured from products
       const orderItems = validItems.map((item) => ({
         productId: new Types.ObjectId(item.productId),
         quantity: item.quantity,
         priceAtPurchase: item.price,
+        selectedAttributes: item.selectedAttributes || {},
         deliveryTimeUnit: item.deliveryTimeUnit,
         deliveryMinTime: item.deliveryMinTime,
         deliveryMaxTime: item.deliveryMaxTime,
@@ -691,9 +650,12 @@ export class OrdersService {
             billingAddress: dto.billingAddress,
             items: orderItems,
             fulfillments,
+            orderSubtotal: orderSubtotal,
             totalAmount,
             status: OrderStatus.PENDING,
+            paymentMethod: dto.paymentMethod || PaymentMethod.E_TRANSFER,
             isPaid: false,
+            deliveryFee: orderDeliveryFee,
             notes: [],
             statusHistory: [
               {
@@ -707,6 +669,8 @@ export class OrdersService {
         ],
         { session },
       );
+
+      this.logger.log(`Guest order created: ${guestOrder.orderId}`);
 
       await guestOrder.populate('items.productId', 'name price images');
       return guestOrder;
@@ -752,7 +716,11 @@ export class OrdersService {
 
   /** Validate guest checkout items and return with prices */
   private async validateGuestItems(
-    items: Array<{ productId: string; quantity: number }>,
+    items: Array<{
+      productId: string;
+      quantity: number;
+      selectedAttributes?: Record<string, string>;
+    }>,
     session?: ClientSession,
   ) {
     const productIds = items
@@ -764,16 +732,15 @@ export class OrdersService {
       .filter(Boolean) as Types.ObjectId[];
 
     if (!productIds.length) {
-      throw new BadRequestException(
-        'No valid products in cart. Each productId must be a valid 24-character hex MongoDB ObjectId (e.g. 507f1f77bcf86cd799439011).',
-      );
+      throw new BadRequestException('No valid products in cart');
     }
 
     const products = await this.productModel
       .find({ _id: { $in: productIds }, availabilityStatus: 'In Stock' })
       .select(
-        '_id stock price deliveryTimeUnit deliveryMinTime deliveryMaxTime',
+        '_id stock price attributes deliveryTimeUnit deliveryMinTime deliveryMaxTime',
       )
+      .populate('attributes')
       .session(session || null)
       .lean();
 
@@ -787,6 +754,7 @@ export class OrdersService {
         {
           stock: p.stock,
           price: p.price,
+          attributes: p.attributes,
           deliveryTimeUnit: p.deliveryTimeUnit,
           deliveryMinTime: p.deliveryMinTime,
           deliveryMaxTime: p.deliveryMaxTime,
@@ -798,6 +766,7 @@ export class OrdersService {
       productId: string;
       quantity: number;
       price: number;
+      selectedAttributes?: Record<string, string>;
       deliveryTimeUnit?: DeliveryTimeUnit;
       deliveryMinTime?: number;
       deliveryMaxTime?: number;
@@ -816,10 +785,53 @@ export class OrdersService {
         );
         continue;
       }
+
+      // Calculate price based on selected attributes/options (same logic as cart service)
+      let finalPrice = product.price;
+      if (item.selectedAttributes && product.attributes) {
+        for (const attr of product.attributes as any[]) {
+          const selected = item.selectedAttributes[attr.name];
+          if (selected) {
+            if (attr.type === 'single') {
+              const selectedOption = attr.options?.find((opt: any) => {
+                const optionName = typeof opt === 'string' ? opt : opt.name;
+                return optionName === selected;
+              });
+
+              if (
+                selectedOption &&
+                typeof selectedOption === 'object' &&
+                selectedOption.price
+              ) {
+                finalPrice += selectedOption.price;
+              }
+            } else if (attr.type === 'multiple') {
+              // Handle comma-separated string from frontend
+              const selectedValues = selected.split(',').map((v) => v.trim());
+              for (const sel of selectedValues) {
+                const selectedOption = attr.options?.find((opt: any) => {
+                  const optionName = typeof opt === 'string' ? opt : opt.name;
+                  return optionName === sel;
+                });
+
+                if (
+                  selectedOption &&
+                  typeof selectedOption === 'object' &&
+                  selectedOption.price
+                ) {
+                  finalPrice += selectedOption.price;
+                }
+              }
+            }
+          }
+        }
+      }
+
       validItems.push({
         productId: item.productId,
         quantity: item.quantity,
-        price: product.price,
+        price: finalPrice,
+        selectedAttributes: item.selectedAttributes || {},
         deliveryTimeUnit: product.deliveryTimeUnit,
         deliveryMinTime: product.deliveryMinTime,
         deliveryMaxTime: product.deliveryMaxTime,
@@ -1018,6 +1030,7 @@ export class OrdersService {
       phone,
       customerName,
       status,
+      paymentMethod,
       startDate,
       endDate,
       guestOrdersOnly,
@@ -1025,6 +1038,7 @@ export class OrdersService {
       page = 1,
       limit = 20,
     } = searchDto;
+
     const skip = (page - 1) * limit;
 
     const dateFilter: any = {};
@@ -1033,66 +1047,85 @@ export class OrdersService {
 
     const baseFilter: any = {
       ...(status && { status }),
+      ...(paymentMethod && { paymentMethod }),
       ...(Object.keys(dateFilter).length > 0 && { createdAt: dateFilter }),
+    };
+
+    const regularBaseFilter: any = {
+      ...baseFilter,
+      ...(orderId && { orderId: { $regex: orderId, $options: 'i' } }),
+    };
+    const guestBaseFilter: any = {
+      ...baseFilter,
+      ...(orderId && { orderId: { $regex: orderId, $options: 'i' } }),
+      ...(email && { 'customerInfo.email': { $regex: email, $options: 'i' } }),
+      ...(phone && { 'customerInfo.phone': { $regex: phone, $options: 'i' } }),
+      ...(customerName && {
+        $or: [
+          { 'customerInfo.firstName': { $regex: customerName, $options: 'i' } },
+          { 'customerInfo.lastName': { $regex: customerName, $options: 'i' } },
+        ],
+      }),
     };
 
     let regularOrders: any[] = [];
     if (!guestOrdersOnly) {
-      // Build the filter for regular orders
-      const regularOrderFilter: any = {
-        ...baseFilter,
-        ...(orderId && { orderId: { $regex: orderId, $options: 'i' } }),
-      };
-
-      // Add userId filter - convert string to ObjectId for MongoDB query
+      // Add userId filter if provided
       if (userId) {
         try {
-          regularOrderFilter.userId = new Types.ObjectId(userId);
+          regularBaseFilter.userId = new Types.ObjectId(userId);
         } catch {
-          // If invalid ObjectId format, use as-is (will return no results)
-          regularOrderFilter.userId = userId;
+          regularBaseFilter.userId = userId;
         }
       }
 
-      regularOrders = await this.orderModel
-        .find(regularOrderFilter)
-        .populate('userId', 'firstName lastName email phone')
-        .populate('items.productId', 'name price images')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean();
+      // If filtering by email or customerName, use aggregation to join user data
+      if (email || customerName) {
+        const pipeline: any[] = [
+          { $match: regularBaseFilter },
+          {
+            $lookup: {
+              from: 'users',
+              localField: 'userId',
+              foreignField: '_id',
+              as: 'userId',
+            },
+          },
+          { $unwind: { path: '$userId', preserveNullAndEmptyArrays: true } },
+        ];
+
+        const userFilter: any[] = [];
+        if (email) {
+          userFilter.push({ 'userId.email': { $regex: email, $options: 'i' } });
+        }
+        if (customerName) {
+          userFilter.push(
+            { 'userId.firstName': { $regex: customerName, $options: 'i' } },
+            { 'userId.lastName': { $regex: customerName, $options: 'i' } },
+          );
+        }
+        pipeline.push({ $match: { $or: userFilter } });
+        pipeline.push({ $sort: { createdAt: -1 } });
+        pipeline.push({ $skip: skip });
+        pipeline.push({ $limit: limit });
+
+        regularOrders = await this.orderModel.aggregate(pipeline);
+      } else {
+        regularOrders = await this.orderModel
+          .find(regularBaseFilter)
+          .populate('userId', 'firstName lastName email phone')
+          .populate('items.productId', 'name price images')
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean();
+      }
     }
 
     let guestOrders: any[] = [];
     if (!registeredOrdersOnly) {
       guestOrders = await this.guestOrderModel
-        .find({
-          ...baseFilter,
-          ...(orderId && { orderId: { $regex: orderId, $options: 'i' } }),
-          ...(email && {
-            'customerInfo.email': { $regex: email, $options: 'i' },
-          }),
-          ...(phone && {
-            'customerInfo.phone': { $regex: phone, $options: 'i' },
-          }),
-          ...(customerName && {
-            $or: [
-              {
-                'customerInfo.firstName': {
-                  $regex: customerName,
-                  $options: 'i',
-                },
-              },
-              {
-                'customerInfo.lastName': {
-                  $regex: customerName,
-                  $options: 'i',
-                },
-              },
-            ],
-          }),
-        })
+        .find(guestBaseFilter)
         .populate('items.productId', 'name price images')
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -1113,18 +1146,18 @@ export class OrdersService {
       isGuestOrder: isGuest,
       customer: isGuest
         ? {
-          name: `${order.customerInfo.firstName} ${order.customerInfo.lastName}`,
-          email: order.customerInfo.email,
-          phone: order.customerInfo.phone,
-        }
+            name: `${order.customerInfo.firstName} ${order.customerInfo.lastName}`,
+            email: order.customerInfo.email,
+            phone: order.customerInfo.phone,
+          }
         : {
-          id: order.userId?._id?.toString(),
-          name: order.userId
-            ? `${order.userId.firstName} ${order.userId.lastName}`
-            : 'Unknown',
-          email: order.userId?.email || 'No email',
-          phone: order.userId?.phone,
-        },
+            id: order.userId?._id?.toString(),
+            name: order.userId
+              ? `${order.userId.firstName} ${order.userId.lastName}`
+              : 'Unknown',
+            email: order.userId?.email || 'No email',
+            phone: order.userId?.phone,
+          },
       itemsCount: order.items?.length || 0,
       items: (order.items || []).map((item: any) => ({
         productId: item.productId?.toString() || null,
@@ -1132,6 +1165,15 @@ export class OrdersService {
         priceAtPurchase: item.priceAtPurchase,
       })),
       ...(isGuest && { shippingAddress: order.shippingAddress }),
+      paymentMethod: order.paymentMethod,
+      paidAt: order.paidAt,
+      stripeSessionId: order.stripeSessionId,
+      paymentIntentId: order.paymentIntentId,
+      stripeAmount: order.stripeAmount,
+      stripeCurrency: order.stripeCurrency,
+      processingFee: order.processingFee,
+      orderSubtotal: order.orderSubtotal,
+      deliveryFee: order.deliveryFee,
     });
 
     const allOrders = [
@@ -1144,11 +1186,42 @@ export class OrdersService {
       )
       .slice(0, limit);
 
+    const getRegularCount = async () => {
+      if (guestOrdersOnly) return 0;
+      if (email || customerName) {
+        const userFilter: any[] = [];
+        if (email)
+          userFilter.push({ 'userId.email': { $regex: email, $options: 'i' } });
+        if (customerName) {
+          userFilter.push(
+            { 'userId.firstName': { $regex: customerName, $options: 'i' } },
+            { 'userId.lastName': { $regex: customerName, $options: 'i' } },
+          );
+        }
+        const result = await this.orderModel.aggregate([
+          { $match: regularBaseFilter },
+          {
+            $lookup: {
+              from: 'users',
+              localField: 'userId',
+              foreignField: '_id',
+              as: 'userId',
+            },
+          },
+          { $unwind: { path: '$userId', preserveNullAndEmptyArrays: true } },
+          { $match: { $or: userFilter } },
+          { $count: 'total' },
+        ]);
+        return result[0]?.total || 0;
+      }
+      return this.orderModel.countDocuments(regularBaseFilter);
+    };
+
     const [regularCount, guestCount] = await Promise.all([
-      guestOrdersOnly ? 0 : this.orderModel.countDocuments(baseFilter),
+      getRegularCount(),
       registeredOrdersOnly
         ? 0
-        : this.guestOrderModel.countDocuments(baseFilter),
+        : this.guestOrderModel.countDocuments(guestBaseFilter),
     ]);
 
     return {
@@ -1162,14 +1235,10 @@ export class OrdersService {
     };
   }
 
-  /**
-   * Confirm order (payment confirmed).
-   * Called by: (1) Stripe webhook when checkout.session.completed, (2) Admin when manually confirming payment.
-   * Idempotent: if already paid, returns the order without changing it.
-   */
+  /** Confirm order (Admin only) */
   async confirmOrder(
     orderId: string,
-    sourceOrAdminId: string, // 'stripe_webhook' when from webhook, or admin user id when from admin
+    adminId: string,
   ): Promise<Order | GuestOrder> {
     let order: OrderDocument | GuestOrderDocument | null =
       await this.orderModel.findOne({ orderId });
@@ -1184,19 +1253,8 @@ export class OrdersService {
       throw new NotFoundException(`Order with ID ${orderId} not found`);
     }
 
-    if (order.isPaid) {
-      this.logger.log(`Order ${orderId} already paid, skipping confirmation`);
-      return order;
-    }
-
     if (order.status !== OrderStatus.PENDING) {
-      if (sourceOrAdminId === 'stripe_webhook') {
-        this.logger.warn(
-          `Order ${orderId} has status ${order.status}, not PENDING; marking paid anyway (webhook)`,
-        );
-      } else {
-        throw new BadRequestException(`Order can only be confirmed when PENDING`);
-      }
+      throw new BadRequestException(`Order can only be confirmed when PENDING`);
     }
 
     const previousStatus = order.status;
@@ -1215,15 +1273,13 @@ export class OrdersService {
       }
     }
 
-    const isFromWebhook = sourceOrAdminId === 'stripe_webhook';
+    // Add status history
     order.statusHistory.push({
       status: OrderStatus.CONFIRMED,
       previousStatus,
       createdAt: new Date(),
-      updatedBy: sourceOrAdminId,
-      reason: isFromWebhook
-        ? 'Payment confirmed via Stripe'
-        : 'Payment confirmed by admin',
+      updatedBy: adminId,
+      reason: 'Payment confirmed by admin',
     });
 
     await order.save();
@@ -1291,29 +1347,6 @@ export class OrdersService {
     return order;
   }
 
-  /**
-   * Mark order as paid after successful Stripe checkout.
-   * Delegates to confirmOrder(orderId, 'stripe_webhook'). Returns null if order not found.
-   * Prefer calling confirmOrder(orderId, 'stripe_webhook') from the webhook.
-   */
-  async markOrderPaidByStripe(
-    orderId: string,
-    _isGuest?: boolean,
-    _guestEmail?: string,
-  ): Promise<OrderDocument | GuestOrderDocument | null> {
-    try {
-      return (await this.confirmOrder(orderId, 'stripe_webhook')) as
-        | OrderDocument
-        | GuestOrderDocument
-        | null;
-    } catch (e) {
-      if (e instanceof NotFoundException) {
-        return null;
-      }
-      throw e;
-    }
-  }
-
   /** Get order details for admin */
   async getOrderDetailsForAdmin(
     orderId: string,
@@ -1356,6 +1389,15 @@ export class OrdersService {
         shippingAddress: (regularOrder as any).shippingAddress,
         notes: (regularOrder as any).notes || [],
         statusHistory: (regularOrder as any).statusHistory || [],
+        paymentMethod: (regularOrder as any).paymentMethod,
+        paidAt: (regularOrder as any).paidAt,
+        stripeSessionId: (regularOrder as any).stripeSessionId,
+        paymentIntentId: (regularOrder as any).paymentIntentId,
+        stripeAmount: (regularOrder as any).stripeAmount,
+        stripeCurrency: (regularOrder as any).stripeCurrency,
+        processingFee: (regularOrder as any).processingFee,
+        orderSubtotal: (regularOrder as any).orderSubtotal,
+        deliveryFee: (regularOrder as any).deliveryFee,
       };
     }
 
@@ -1393,6 +1435,15 @@ export class OrdersService {
         shippingAddress: guestOrder.shippingAddress,
         notes: (guestOrder as any).notes || [],
         statusHistory: (guestOrder as any).statusHistory || [],
+        paymentMethod: (guestOrder as any).paymentMethod,
+        paidAt: (guestOrder as any).paidAt,
+        stripeSessionId: (guestOrder as any).stripeSessionId,
+        paymentIntentId: (guestOrder as any).paymentIntentId,
+        stripeAmount: (guestOrder as any).stripeAmount,
+        stripeCurrency: (guestOrder as any).stripeCurrency,
+        processingFee: (guestOrder as any).processingFee,
+        orderSubtotal: (guestOrder as any).orderSubtotal,
+        deliveryFee: (guestOrder as any).deliveryFee,
       };
     }
 
@@ -2231,5 +2282,293 @@ export class OrdersService {
       );
       return { cancelledCount, guestCancelledCount };
     }
+  }
+
+  // ============================================================
+  // STRIPE CHECKOUT INTEGRATION
+  // ============================================================
+
+  /**
+   * Calculate Stripe processing fee (2.9% + $0.30 CAD)
+   */
+  private calculateProcessingFee(orderSubtotal: number): number {
+    const fee = orderSubtotal * 0.029 + 0.3;
+    return Math.round(fee * 100) / 100; // Round to 2 decimal places
+  }
+
+  /**
+   * Check if an order is paid (supports both regular and guest orders)
+   */
+  async isOrderPaid(orderId: string): Promise<boolean> {
+    const regularOrder = await this.orderModel.findOne({ orderId }).lean();
+    if (regularOrder) return !!regularOrder.isPaid;
+
+    const guestOrder = await this.guestOrderModel.findOne({ orderId }).lean();
+    return !!guestOrder?.isPaid;
+  }
+
+  /**
+   * Get order by payment intent ID (supports both regular and guest orders)
+   */
+  async getOrderByPaymentIntent(paymentIntentId: string): Promise<{
+    order?: OrderDocument;
+    guestOrder?: GuestOrderDocument;
+  }> {
+    const order = await this.orderModel.findOne({ paymentIntentId });
+    if (order) return { order };
+
+    const guestOrder = await this.guestOrderModel.findOne({ paymentIntentId });
+    return { guestOrder: guestOrder || undefined };
+  }
+
+  /**
+   * Mark order as paid (supports both regular and guest orders)
+   * Called by Stripe webhook after successful payment
+   */
+  async markOrderAsPaid(
+    orderId: string,
+  ): Promise<{ order?: OrderDocument; guestOrder?: GuestOrderDocument }> {
+    return inTransaction(this.connection, async (session) => {
+      // Try regular order first
+      const orderDoc = await this.orderModel
+        .findOne({ orderId })
+        .session(session);
+
+      if (orderDoc) {
+        orderDoc.isPaid = true;
+        orderDoc.paidAt = new Date();
+        orderDoc.status = OrderStatus.CONFIRMED;
+        await orderDoc.save({ session });
+
+        // Send confirmation email
+        await orderDoc.populate('userId', 'firstName lastName email');
+        const user = orderDoc.userId as any;
+        if (user?.email) {
+          const details = this.ordersEmailService.prepareOrderConfirmationData(
+            orderDoc,
+            {
+              firstName: user.firstName,
+              lastName: user.lastName,
+              email: user.email,
+              phone: user.phoneNumber || '',
+            },
+          );
+          await this.ordersEmailService.sendOrderConfirmationEmail(
+            user.email,
+            orderDoc.orderId,
+            details,
+            false,
+          );
+        }
+
+        return { order: orderDoc };
+      }
+
+      // Try guest order
+      const guestDoc = await this.guestOrderModel
+        .findOne({ orderId })
+        .session(session);
+
+      if (guestDoc) {
+        guestDoc.isPaid = true;
+        guestDoc.paidAt = new Date();
+        guestDoc.status = OrderStatus.CONFIRMED;
+        await guestDoc.save({ session });
+
+        // Send confirmation email
+        const details = this.ordersEmailService.prepareOrderConfirmationData(
+          guestDoc,
+          guestDoc.customerInfo,
+        );
+        await this.ordersEmailService.sendOrderConfirmationEmail(
+          guestDoc.customerInfo.email,
+          guestDoc.orderId,
+          details,
+          true,
+        );
+
+        return { guestOrder: guestDoc };
+      }
+
+      this.logger.error(`[markOrderAsPaid] Order not found: ${orderId}`);
+      throw new NotFoundException('Order not found');
+    });
+  }
+
+  /**
+   * Create Stripe checkout session for registered user order
+   */
+  async createCheckoutSessionForOrder(
+    orderId: string,
+    userId: string,
+  ): Promise<{ sessionUrl: string }> {
+    const appUrl = config.cors.appUrl || 'http://localhost:5173';
+    const successUrl = `${appUrl}/payment/success?orderId=${orderId}&session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${appUrl}/payment/cancel?orderId=${orderId}`;
+
+    const order = await this.orderModel
+      .findOne({
+        orderId,
+        userId: new Types.ObjectId(userId),
+      })
+      .populate('userId', 'email');
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (order.isPaid) {
+      throw new BadRequestException('Order already paid');
+    }
+
+    if (order.paymentMethod && order.paymentMethod !== PaymentMethod.STRIPE) {
+      this.logger.error(
+        `Payment method mismatch! Expected: ${PaymentMethod.STRIPE}, Got: ${order.paymentMethod}`,
+      );
+      throw new BadRequestException(
+        'Payment method must be Stripe for checkout',
+      );
+    }
+
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new BadRequestException('Order has been cancelled');
+    }
+
+    const user = order.userId as any;
+    const customerEmail = user?.email;
+
+    // Calculate order subtotal, processing fee, delivery fee, and final amount
+    const orderSubtotal = order.items.reduce(
+      (sum, i) => sum + i.priceAtPurchase * i.quantity,
+      0,
+    );
+    const deliveryFee = order.deliveryFee || 0;
+    const processingFee = this.calculateProcessingFee(
+      orderSubtotal + deliveryFee,
+    );
+    const finalAmount = Math.round(
+      (orderSubtotal + deliveryFee + processingFee) * 100,
+    ); // Convert to cents
+
+    // Store fee details in order and update totalAmount to include delivery and processing fees
+    order.orderSubtotal = Math.round(orderSubtotal * 100) / 100;
+    order.deliveryFee = Math.round(deliveryFee * 100) / 100;
+    order.processingFee = processingFee;
+    order.totalAmount =
+      Math.round((orderSubtotal + deliveryFee + processingFee) * 100) / 100;
+    await order.save();
+
+    // Create Stripe checkout session
+    const session = await this.stripeService.createCheckoutSession({
+      amountCents: finalAmount,
+      currency: 'cad',
+      successUrl,
+      cancelUrl,
+      customerEmail,
+      metadata: {
+        orderId: order.orderId,
+        userId: order.userId.toString(),
+      },
+      idempotencyKey: `order_${order.orderId}`,
+    });
+
+    // Store session ID and payment intent ID in order
+    order.stripeSessionId = session.id;
+    order.paymentIntentId = session.payment_intent as string;
+    await order.save();
+
+    if (!session.url) {
+      throw new BadRequestException('Failed to create checkout session URL');
+    }
+
+    return { sessionUrl: session.url };
+  }
+
+  /**
+   * Create Stripe checkout session for guest order
+   */
+  async createGuestCheckoutSession(
+    orderId: string,
+    email: string,
+  ): Promise<{ sessionUrl: string }> {
+    const appUrl = config.cors.appUrl || 'http://localhost:5173';
+    const successUrl = `${appUrl}/payment/success?orderId=${orderId}&email=${encodeURIComponent(email)}&session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${appUrl}/payment/cancel?orderId=${orderId}&email=${encodeURIComponent(email)}`;
+
+    if (!email) {
+      throw new BadRequestException('Email is required for guest checkout');
+    }
+
+    const order = await this.guestOrderModel.findOne({
+      orderId,
+      'customerInfo.email': email,
+    });
+
+    if (!order) {
+      throw new NotFoundException('Guest order not found');
+    }
+
+    if (order.isPaid) {
+      throw new BadRequestException('Order already paid');
+    }
+
+    if (order.paymentMethod && order.paymentMethod !== PaymentMethod.STRIPE) {
+      this.logger.error(
+        `Payment method mismatch! Expected: ${PaymentMethod.STRIPE}, Got: ${order.paymentMethod}`,
+      );
+      throw new BadRequestException(
+        'Payment method must be Stripe for checkout',
+      );
+    }
+
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new BadRequestException('Order has been cancelled');
+    }
+
+    // Calculate order subtotal, processing fee, delivery fee, and final amount
+    const orderSubtotal = order.items.reduce(
+      (sum, i) => sum + i.priceAtPurchase * i.quantity,
+      0,
+    );
+    const deliveryFee = order.deliveryFee || 0;
+    const processingFee = this.calculateProcessingFee(
+      orderSubtotal + deliveryFee,
+    );
+    const finalAmount = Math.round(
+      (orderSubtotal + deliveryFee + processingFee) * 100,
+    ); // Convert to cents
+
+    // Store fee details in order and update totalAmount to include delivery and processing fees
+    order.orderSubtotal = Math.round(orderSubtotal * 100) / 100;
+    order.deliveryFee = Math.round(deliveryFee * 100) / 100;
+    order.processingFee = processingFee;
+    order.totalAmount =
+      Math.round((orderSubtotal + deliveryFee + processingFee) * 100) / 100;
+    await order.save();
+
+    // Create Stripe checkout session
+    const session = await this.stripeService.createCheckoutSession({
+      amountCents: finalAmount,
+      currency: 'cad',
+      successUrl,
+      cancelUrl,
+      customerEmail: email,
+      metadata: {
+        orderId: order.orderId,
+        guestEmail: email,
+      },
+      idempotencyKey: `guest_order_${order.orderId}`,
+    });
+
+    // Store session ID and payment intent ID in order
+    order.stripeSessionId = session.id;
+    order.paymentIntentId = session.payment_intent as string;
+    await order.save();
+
+    if (!session.url) {
+      throw new BadRequestException('Failed to create checkout session URL');
+    }
+
+    return { sessionUrl: session.url };
   }
 }

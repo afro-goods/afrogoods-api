@@ -5,17 +5,18 @@ export type DeliverySettingsDocument = DeliverySettings & Document;
 
 @Schema({ timestamps: true })
 export class DeliverySettings {
-  @Prop({ default: false })
+  @Prop({ type: Boolean, default: false })
   deliveryAvailabilityEnabled: boolean;
 
-  @Prop()
+  @Prop({ type: String })
   calendlyApiTokenEncrypted: string;
 
-  @Prop()
+  @Prop({ type: String })
   calendlyEventTypeUri: string;
 
-  @Prop({ default: 60 })
+  @Prop({ type: Number, default: 60 })
   cacheDurationMinutes: number;
 }
 
-export const DeliverySettingsSchema = SchemaFactory.createForClass(DeliverySettings);
+export const DeliverySettingsSchema =
+  SchemaFactory.createForClass(DeliverySettings);

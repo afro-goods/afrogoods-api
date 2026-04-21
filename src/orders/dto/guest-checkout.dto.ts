@@ -1,7 +1,6 @@
 import {
   IsString,
   IsEmail,
-  IsPhoneNumber,
   IsNotEmpty,
   IsOptional,
   IsBoolean,
@@ -10,8 +9,10 @@ import {
   ValidateNested,
   MinLength,
   Min,
+  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { PaymentMethod } from '../enums/payment-method.enum';
 
 export class CustomerInfoDto {
   @IsString()
@@ -100,4 +101,13 @@ export class GuestCheckoutDto {
   @IsString()
   @MinLength(6)
   accountPassword?: string;
+
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  paymentMethod?: PaymentMethod;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  deliveryFee?: number;
 }

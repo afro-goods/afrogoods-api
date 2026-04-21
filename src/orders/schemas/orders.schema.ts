@@ -8,6 +8,7 @@ import type {
   StatusHistory,
   Address,
 } from '../interfaces/order.interface';
+import { PaymentMethod } from '../enums/payment-method.enum';
 
 export type OrderDocument = Order & Document;
 
@@ -30,6 +31,37 @@ export class Order {
 
   @Prop({ type: String })
   paymentIntentId?: string;
+
+  @Prop({
+    type: String,
+    enum: PaymentMethod,
+    default: PaymentMethod.E_TRANSFER,
+  })
+  paymentMethod: PaymentMethod;
+
+  @Prop({ type: String })
+  stripeSessionId?: string;
+
+  @Prop({ type: String })
+  paymentStatus?: string;
+
+  @Prop({ type: String })
+  stripeCustomerId?: string;
+
+  @Prop({ type: Number })
+  stripeAmount?: number;
+
+  @Prop({ type: String })
+  stripeCurrency?: string;
+
+  @Prop({ type: Number })
+  processingFee?: number;
+
+  @Prop({ type: Number })
+  orderSubtotal?: number;
+
+  @Prop({ type: Number })
+  deliveryFee?: number;
 
   @Prop({ type: Boolean, default: false })
   isPaid: boolean;
@@ -60,3 +92,5 @@ export class Order {
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);
+OrderSchema.index({ paymentIntentId: 1 }, { sparse: true });
+OrderSchema.index({ stripeSessionId: 1 }, { sparse: true });

@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { config } from './config';
-import { json, urlencoded } from 'express';
+import { json, urlencoded, raw } from 'express';
 import { ValidationPipe } from '@nestjs/common';
 
 const origins: Record<string, string[]> = {
@@ -25,18 +25,9 @@ async function bootstrap() {
   // Set global API prefix
   app.setGlobalPrefix('api');
 
-  // Body size limits; store raw body for Stripe webhook signature verification
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  app.use(
-    json({
-      limit: '50mb',
-      verify: (req: any, _res: any, buf: Buffer) => {
-        if (req.originalUrl === '/api/webhooks/stripe') {
-          req.rawBody = buf;
-        }
-      },
-    }),
-  );
+  // Body size limits - raw body for Stripe webhook signature verification
+  app.use('/api/stripe/webhook', raw({ type: 'application/json' }));
+  app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: false, limit: '50mb' }));
 
   app.useGlobalPipes(

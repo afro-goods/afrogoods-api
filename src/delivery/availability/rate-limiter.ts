@@ -14,13 +14,13 @@ export class RateLimiter {
 
   async waitForToken(): Promise<void> {
     this.refill();
-    
+
     if (this.tokens < 1) {
       const waitTime = (60 * 1000) / this.refillRate;
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
       return this.waitForToken();
     }
-    
+
     this.tokens -= 1;
   }
 
@@ -28,7 +28,7 @@ export class RateLimiter {
     const now = Date.now();
     const elapsed = now - this.lastRefill;
     const refillAmount = (elapsed * this.refillRate) / (60 * 1000);
-    
+
     this.tokens = Math.min(this.maxTokens, this.tokens + refillAmount);
     this.lastRefill = now;
   }

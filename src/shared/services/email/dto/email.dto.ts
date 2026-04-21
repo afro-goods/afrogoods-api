@@ -209,6 +209,32 @@ export class SendAdvertSubmittedEmailDto {
   advertType: string;
 }
 
+export class SendAdminAdvertSubmittedEmailDto {
+  @IsEmail()
+  @IsNotEmpty()
+  adminEmail: string;
+
+  @IsString()
+  @IsNotEmpty()
+  customerName: string;
+
+  @IsEmail()
+  @IsNotEmpty()
+  customerEmail: string;
+
+  @IsString()
+  @IsNotEmpty()
+  advertId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  advertTitle: string;
+
+  @IsString()
+  @IsNotEmpty()
+  advertType: string;
+}
+
 export class SendAdvertReviewedEmailDto {
   @IsEmail()
   @IsNotEmpty()

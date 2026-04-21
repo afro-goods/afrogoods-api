@@ -5,6 +5,7 @@ import {
   SendOrderConfirmationEmailDto,
   SendCancellationConfirmationEmailDto,
 } from '../../shared/services/email/dto/email.dto';
+import { PaymentMethod } from '../enums/payment-method.enum';
 
 @Injectable()
 export class OrdersEmailService {
@@ -80,7 +81,7 @@ export class OrdersEmailService {
           customerInfo.phone ||
           customerInfo.phoneNumber,
       },
-      paymentMethod: 'E-Transfer',
+      paymentMethod: PaymentMethod.E_TRANSFER,
     };
   }
 

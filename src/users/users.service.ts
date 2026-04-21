@@ -86,6 +86,22 @@ export class UsersService {
       .exec();
   }
 
+  async recordAdminLogin(firebaseUid: string): Promise<void> {
+    const user = await this.userModel.findOne({ firebaseUid }).exec();
+    if (!user) return;
+
+    const previousLoginAt = user.lastLogin ?? null;
+    await this.userModel
+      .findOneAndUpdate(
+        { firebaseUid },
+        {
+          adminPreviousLoginAt: previousLoginAt,
+          lastLogin: new Date(),
+        },
+      )
+      .exec();
+  }
+
   async verifyEmail(firebaseUid: string): Promise<User> {
     const user = await this.userModel
       .findOneAndUpdate({ firebaseUid }, { emailVerified: true }, { new: true })
@@ -123,24 +139,5 @@ export class UsersService {
     }
 
     return user;
-  }
-
-  /**
-   * Link an existing user (matched by email) to a Firebase UID.
-   * Used when the same email was registered with a different Firebase UID.
-   */
-  async linkFirebaseUidByEmail(
-    email: string,
-    firebaseUid: string,
-  ): Promise<User | null> {
-    const user = await this.userModel
-      .findOneAndUpdate(
-        { email: email.toLowerCase() },
-        { $set: { firebaseUid } },
-        { new: true },
-      )
-      .lean()
-      .exec();
-    return user ?? null;
   }
 }

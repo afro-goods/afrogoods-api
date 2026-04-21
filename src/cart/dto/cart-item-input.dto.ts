@@ -1,4 +1,10 @@
-import { IsMongoId, IsNumber, Min, IsOptional, IsObject } from 'class-validator';
+import {
+  IsMongoId,
+  IsNumber,
+  Min,
+  IsOptional,
+  IsObject,
+} from 'class-validator';
 
 export class CartItemInput {
   @IsMongoId()

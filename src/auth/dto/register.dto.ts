@@ -13,8 +13,8 @@ export class RegisterDto {
   @IsNotEmpty()
   lastName: string;
 
-  @IsOptional()
   @IsString()
+  @IsNotEmpty()
   username?: string;
 
   @IsString()

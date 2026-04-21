@@ -45,7 +45,7 @@ export class ProductsService {
           if (typeof img === 'string') {
             return img;
           }
-          
+
           const base64Data = cleanBase64(img.uri);
           if (!base64Data) return null;
 
@@ -126,7 +126,9 @@ export class ProductsService {
     const { page, limit, search, category, sort } = query;
 
     const filter: any = {
-      availabilityStatus: { $in: ['Draft', 'Out of Stock', 'In Stock', 'Archived'] },
+      availabilityStatus: {
+        $in: ['Draft', 'Out of Stock', 'In Stock', 'Archived'],
+      },
     };
 
     if (search) {
@@ -235,7 +237,7 @@ export class ProductsService {
               if (typeof img === 'string') {
                 return img;
               }
-              
+
               // If it's an object with uri (new upload), process it
               if (typeof img === 'object' && img.uri) {
                 const base64Data = cleanBase64(img.uri);
@@ -250,7 +252,7 @@ export class ProductsService {
 
                 return result.secure_url;
               }
-              
+
               return null;
             }),
           );
@@ -290,10 +292,14 @@ export class ProductsService {
       // Automatically update availabilityStatus based on stock
       // BUT only for In Stock/Out of Stock products (not Draft or Archived)
       if (dto.stock !== undefined) {
-        const currentStatus = dto.availabilityStatus || product.availabilityStatus;
-        
+        const currentStatus =
+          dto.availabilityStatus || product.availabilityStatus;
+
         // Only auto-manage status if it's currently In Stock or Out of Stock
-        if (currentStatus === AvailabilityStatus.IN_STOCK || currentStatus === AvailabilityStatus.OUT_OF_STOCK) {
+        if (
+          currentStatus === AvailabilityStatus.IN_STOCK ||
+          currentStatus === AvailabilityStatus.OUT_OF_STOCK
+        ) {
           if (dto.stock === 0) {
             updateData.availabilityStatus = AvailabilityStatus.OUT_OF_STOCK;
           } else if (dto.stock > 0) {

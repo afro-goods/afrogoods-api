@@ -6,13 +6,17 @@ import { Order, OrderSchema } from './schemas/orders.schema';
 import { GuestOrder, GuestOrderSchema } from './schemas/guest-order.schema';
 import { Cart, CartSchema } from '../cart/schemas/cart.schema';
 import { Product, ProductSchema } from '../product/schemas/product.schema';
+import {
+  WebhookEvent,
+  WebhookEventSchema,
+} from '../shared/services/stripe/schemas/webhook-event.schema';
 import { AuthModule } from '../auth/auth.module';
 import { OrdersEmailService } from './services/orders-email.service';
 import { FulfillmentGroupingService } from './services/fulfillment-grouping.service';
 import { PaginationService } from '../shared/services/pagination/services/pagination.service';
 import { SharedModule } from '../shared/shared.module';
 import { PaymentSettingsModule } from '../payment-settings/payment-settings.module';
-import { StripeModule } from '../shared/stripe/stripe.module';
+import { StripeWebhookController } from '../shared/services/stripe/webhooks/webhook.controller';
 
 @Module({
   imports: [
@@ -21,13 +25,13 @@ import { StripeModule } from '../shared/stripe/stripe.module';
       { name: GuestOrder.name, schema: GuestOrderSchema },
       { name: Cart.name, schema: CartSchema },
       { name: Product.name, schema: ProductSchema },
+      { name: WebhookEvent.name, schema: WebhookEventSchema },
     ]),
     AuthModule,
     SharedModule,
     PaymentSettingsModule,
-    StripeModule,
   ],
-  controllers: [OrdersController],
+  controllers: [OrdersController, StripeWebhookController],
   providers: [
     OrdersService,
     OrdersEmailService,
@@ -36,4 +40,4 @@ import { StripeModule } from '../shared/stripe/stripe.module';
   ],
   exports: [OrdersService, OrdersEmailService, FulfillmentGroupingService],
 })
-export class OrdersModule { }
+export class OrdersModule {}

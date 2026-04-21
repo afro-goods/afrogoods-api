@@ -97,7 +97,11 @@ export class AuthService {
         );
       }
 
-      await this.usersService.updateLastLogin(decodedToken.uid);
+      if (user.role === UserRole.ADMIN) {
+        await this.usersService.recordAdminLogin(decodedToken.uid);
+      } else {
+        await this.usersService.updateLastLogin(decodedToken.uid);
+      }
 
       return {
         message: 'Login successful',

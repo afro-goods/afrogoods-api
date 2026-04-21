@@ -13,19 +13,6 @@ export interface CalendlyAvailabilityResponse {
   collection: CalendlyAvailabilitySlot[];
 }
 
-interface CalendlyUserMeResponse {
-  resource: { uri: string };
-}
-
-interface CalendlyEventTypeItem {
-  uri: string;
-  scheduling_url?: string;
-}
-
-interface CalendlyEventTypesResponse {
-  collection: CalendlyEventTypeItem[];
-}
-
 @Injectable()
 export class CalendlyApiClient {
   private readonly logger = new Logger(CalendlyApiClient.name);
@@ -51,7 +38,7 @@ export class CalendlyApiClient {
 
     // Extract UUID from the event type URI if it's a full URL
     const eventTypeUuid = this.extractEventTypeUuid(eventTypeUri);
-    
+
     return this.fetchWithRetry(apiToken, eventTypeUuid, startTime, endTime);
   }
 
@@ -59,8 +46,10 @@ export class CalendlyApiClient {
     if (eventTypeUri.startsWith('https://api.calendly.com/event_types/')) {
       return eventTypeUri;
     }
-    
-    this.logger.warn(`Event type URI appears to be a scheduling link: ${eventTypeUri}. This may need to be converted to an API URI.`);
+
+    this.logger.warn(
+      `Event type URI appears to be a scheduling link: ${eventTypeUri}. This may need to be converted to an API URI.`,
+    );
     return eventTypeUri;
   }
 
@@ -74,7 +63,7 @@ export class CalendlyApiClient {
   ): Promise<CalendlyAvailabilityResponse> {
     try {
       const response = await firstValueFrom(
-        this.httpService.get<CalendlyAvailabilityResponse>(`${this.baseUrl}/event_type_available_times`, {
+        this.httpService.get(`${this.baseUrl}/event_type_available_times`, {
           headers: {
             Authorization: `Bearer ${apiToken}`,
             'Content-Type': 'application/json',
@@ -127,7 +116,10 @@ export class CalendlyApiClient {
     return status === 429 || (status >= 500 && status <= 599);
   }
 
-  async getEventTypeFromSchedulingUrl(apiToken: string, schedulingUrl: string): Promise<string> {
+  async getEventTypeFromSchedulingUrl(
+    apiToken: string,
+    schedulingUrl: string,
+  ): Promise<string> {
     try {
       // First, get the current user to find their organization
       const userResponse = await firstValueFrom(
@@ -145,7 +137,7 @@ export class CalendlyApiClient {
 
       // Get all event types for this user
       const eventTypesResponse = await firstValueFrom(
-        this.httpService.get<CalendlyEventTypesResponse>(`${this.baseUrl}/event_types`, {
+        this.httpService.get(`${this.baseUrl}/event_types`, {
           headers: {
             Authorization: `Bearer ${apiToken}`,
             'Content-Type': 'application/json',
@@ -160,9 +152,9 @@ export class CalendlyApiClient {
       // Find the event type that matches the scheduling URL
       const eventTypes = eventTypesResponse.data.collection;
       this.logger.log(`Found ${eventTypes.length} event types`);
-      
-      const matchingEventType = eventTypes.find((et: any) => 
-        et.scheduling_url === schedulingUrl
+
+      const matchingEventType = eventTypes.find(
+        (et: any) => et.scheduling_url === schedulingUrl,
       );
 
       if (matchingEventType) {
@@ -170,9 +162,14 @@ export class CalendlyApiClient {
         return matchingEventType.uri;
       }
 
-      throw new Error(`No event type found matching scheduling URL: ${schedulingUrl}`);
+      throw new Error(
+        `No event type found matching scheduling URL: ${schedulingUrl}`,
+      );
     } catch (error) {
-      this.logger.error(`Failed to get event type from scheduling URL: ${error.message}`, error.stack);
+      this.logger.error(
+        `Failed to get event type from scheduling URL: ${error.message}`,
+        error.stack,
+      );
       throw error;
     }
   }

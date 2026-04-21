@@ -22,7 +22,7 @@ interface EnvVars {
 
   FIREBASE_SERVICE_ACCOUNT_BASE64: string;
 
-  STRIPE_SECRET_KEY?: string;
+  STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET?: string;
   RECAPTCHA_SECRET_KEY?: string;
   ENCRYPTION_KEY?: string;
@@ -56,7 +56,7 @@ const schema = joi
 
     FIREBASE_SERVICE_ACCOUNT_BASE64: joi.string().base64().required(),
 
-    STRIPE_SECRET_KEY: joi.string().optional(),
+    STRIPE_SECRET_KEY: joi.string().required(),
     STRIPE_WEBHOOK_SECRET: joi.string().optional(),
     RECAPTCHA_SECRET_KEY: joi.string().optional(),
     ENCRYPTION_KEY: joi.string().optional().allow(''),
@@ -99,7 +99,7 @@ export const config = {
     url: ((env.APP_URL ?? '').trim() || 'https://afrogoods.com') as string,
   },
   stripe: {
-    secretKey: env.STRIPE_SECRET_KEY ?? '',
+    secretKey: env.STRIPE_SECRET_KEY,
     webhookSecret: env.STRIPE_WEBHOOK_SECRET ?? '',
   },
   cloudinary: {

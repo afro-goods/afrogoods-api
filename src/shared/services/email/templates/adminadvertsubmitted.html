@@ -1,0 +1,81 @@
+<h2>New Advert Submitted for Review</h2>
+
+<p>Hello Admin,</p>
+
+<p>
+  A new advert has been submitted on {{appName}} and is waiting for review.
+</p>
+
+<div
+  style="
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 5px;
+    margin: 20px 0;
+  "
+>
+  <h3 style="margin-top: 0">Advert Details</h3>
+  <table style="width: 100%; border-collapse: collapse">
+    <tr>
+      <td style="padding: 5px 0"><strong>Advert ID:</strong></td>
+      <td style="padding: 5px 0; text-align: right">{{advertId}}</td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 0"><strong>Title:</strong></td>
+      <td style="padding: 5px 0; text-align: right">{{advertTitle}}</td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 0"><strong>Type:</strong></td>
+      <td style="padding: 5px 0; text-align: right">{{advertType}}</td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 0"><strong>Status:</strong></td>
+      <td style="padding: 5px 0; text-align: right">
+        <span
+          style="
+            padding: 3px 10px;
+            background-color: #fff3cd;
+            color: #856404;
+            border-radius: 3px;
+            font-size: 14px;
+          "
+        >
+          Pending review
+        </span>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 0"><strong>Submitted:</strong></td>
+      <td style="padding: 5px 0; text-align: right">
+        {{formatDate submittedAt}}
+      </td>
+    </tr>
+  </table>
+</div>
+
+<div
+  style="
+    background-color: #e7f3ff;
+    padding: 15px;
+    border-left: 4px solid #3498db;
+    border-radius: 3px;
+    margin: 20px 0;
+  "
+>
+  <h4 style="margin-top: 0">Customer</h4>
+  <p style="margin: 0">
+    <strong>Name:</strong> {{customerName}}<br />
+    <strong>Email:</strong> {{customerEmail}}
+  </p>
+</div>
+
+<div class="text-center">
+  <a href="{{adminDashboardUrl}}" class="button">Open Admin Dashboard</a>
+</div>
+
+<hr class="divider" />
+
+<p>
+  You’re receiving this because you’re configured as an advert review admin.
+</p>
+

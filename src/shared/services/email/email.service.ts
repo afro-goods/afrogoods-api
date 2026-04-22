@@ -9,6 +9,7 @@ import {
   SendOrderStatusUpdateEmailDto,
   SendCancellationConfirmationEmailDto,
   SendAdvertSubmittedEmailDto,
+  SendAdminAdvertSubmittedEmailDto,
   SendAdvertReviewedEmailDto,
 } from './dto/email.dto';
 import {
@@ -260,6 +261,31 @@ export class EmailService {
         submittedAt: new Date(),
         appName: this.APP_NAME,
         appUrl: this.APP_URL,
+      },
+    );
+  }
+
+  /**
+   * Send email to admins when a new advert is submitted for review.
+   */
+  async sendAdminAdvertSubmittedEmail(
+    dto: SendAdminAdvertSubmittedEmailDto,
+  ): Promise<EmailResult> {
+    return this.sendEmail(
+      dto.adminEmail,
+      `New advert submitted for review – ${dto.advertTitle}`,
+      'adminadvertsubmitted',
+      {
+        adminEmail: dto.adminEmail,
+        customerName: dto.customerName,
+        customerEmail: dto.customerEmail,
+        advertId: dto.advertId,
+        advertTitle: dto.advertTitle,
+        advertType: dto.advertType,
+        submittedAt: new Date(),
+        appName: this.APP_NAME,
+        appUrl: this.APP_URL,
+        adminDashboardUrl: this.ADMIN_DASHBOARD_URL,
       },
     );
   }

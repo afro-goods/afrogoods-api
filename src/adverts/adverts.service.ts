@@ -19,6 +19,7 @@ import { AdvertStatus } from './enums/advert-status.enum';
 import { EmailService } from '../shared/services/email/email.service';
 import { CaptchaService } from '../shared/services/captcha/captcha.service';
 import { PaymentSettingsService } from '../payment-settings/payment-settings.service';
+import { config } from 'src/config';
 
 @Injectable()
 export class AdvertsService {
@@ -133,6 +134,24 @@ export class AdvertsService {
     } catch {
       this.logger.error(`Failed to send advert submission email`);
       // Don't throw - email failure shouldn't block advert creation
+    }
+
+    // Notify admins (optional) that a new advert is pending review
+    const adminEmails = config.admin?.advertReviewEmails ?? [];
+    if (adminEmails.length > 0) {
+      const owner = savedAdvert.owner as any;
+      await Promise.allSettled(
+        adminEmails.map((adminEmail) =>
+          this.emailService.sendAdminAdvertSubmittedEmail({
+            adminEmail,
+            customerName: `${owner.firstName} ${owner.lastName}`,
+            customerEmail: owner.email,
+            advertId: savedAdvert._id.toString(),
+            advertTitle: savedAdvert.title,
+            advertType: savedAdvert.type,
+          }),
+        ),
+      );
     }
 
     return savedAdvert;

@@ -1,0 +1,78 @@
+<h2>Order Cancellation Confirmation</h2>
+
+<p>{{#if customerName}}Hello {{customerName}},{{else}}Hello,{{/if}}</p>
+
+<p>This email confirms that your order has been cancelled as requested.</p>
+
+<div style="background-color: #f8d7da; padding: 20px; border-left: 4px solid #dc3545; border-radius: 3px; margin: 20px 0;">
+  <h3 style="margin-top: 0; color: #721c24;">Cancelled Order Details</h3>
+  <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td style="padding: 5px 0;"><strong>Order Number:</strong></td>
+      <td style="padding: 5px 0; text-align: right;">{{orderId}}</td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 0;"><strong>Order Total:</strong></td>
+      <td style="padding: 5px 0; text-align: right;">{{currency orderTotal 'CAD'}}</td>
+    </tr>
+  </table>
+</div>
+
+{{#if cancellationReason}}
+<div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0;">
+  <h4 style="margin-top: 0;">Cancellation Reason:</h4>
+  <p style="margin: 0;">{{cancellationReason}}</p>
+</div>
+{{/if}}
+
+<div style="background-color: #d1ecf1; padding: 20px; border-left: 4px solid #17a2b8; border-radius: 3px; margin: 20px 0;">
+  <h3 style="margin-top: 0; color: #0c5460;">💳 Refund Information</h3>
+  
+  <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
+    <tr>
+      <td style="padding: 5px 0;"><strong>Refund Amount:</strong></td>
+      <td style="padding: 5px 0; text-align: right;"><strong>{{currency refundAmount 'CAD'}}</strong></td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 0;"><strong>Refund Method:</strong></td>
+      <td style="padding: 5px 0; text-align: right;">{{refundMethod}}</td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 0;"><strong>Processing Time:</strong></td>
+      <td style="padding: 5px 0; text-align: right;">{{refundTimeline}}</td>
+    </tr>
+  </table>
+  
+  <p style="margin: 15px 0 0 0; color: #0c5460; font-size: 14px;">
+    Your refund will be processed to your original payment method. Depending on your bank or card issuer, it may take an additional 2-5 business days for the funds to appear in your account.
+  </p>
+</div>
+
+<hr class="divider">
+
+<h3>What Happens Next?</h3>
+
+<ol>
+  <li><strong>Refund Initiated:</strong> We've started processing your refund</li>
+  <li><strong>Bank Processing:</strong> Your bank/card issuer will process the refund ({{refundTimeline}})</li>
+  <li><strong>Funds Available:</strong> The refund amount will appear in your account</li>
+</ol>
+
+<div class="text-center">
+  <a href="{{appUrl}}/shop" class="button">Continue Shopping</a>
+</div>
+
+<hr class="divider">
+
+<h3>Need Help?</h3>
+<p>If you have any questions about this cancellation or need assistance, please don't hesitate to contact us:</p>
+
+<ul>
+  <li>Help Center: <a href="{{appUrl}}/help" style="color: #3498db;">{{appUrl}}/help</a></li>
+  <li>Live Chat: Available on our website</li>
+</ul>
+
+<p>We're sorry to see this order cancelled, but we hope to serve you again soon!</p>
+
+<p>Best regards,<br>
+<strong>The {{appName}} Team</strong></p>

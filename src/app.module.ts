@@ -9,14 +9,21 @@ import { AppService } from './app.service';
 import { config } from './config';
 
 // Feature modules
-// import { UserModule } from './users/user.module';
-// import { AuthModule } from './authentication/auth.module';
-// import { ProductModule } from './products/product.module';
-// import { OrderModule } from './orders/order.module';
+import { FirebaseModule } from 'src/firebase/firebase.module';
+import { UsersModule } from 'src/users/users.module';
+import { AuthModule } from 'src/auth/auth.module';
+import { SharedModule } from 'src/shared/shared.module';
+import { ProductsModule } from 'src/product/product.module';
+import { AttributesModule } from './attributes/attributes.module';
+import { CategoriesModule } from './categories/categories.module';
+import { OrdersModule } from './orders/orders.module';
+import { AdvertsModule } from './adverts/adverts.module';
+import { PaymentSettingsModule } from './payment-settings/payment-settings.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { DeliveryModule } from './delivery/delivery.module';
+import { HealthModule } from './health/health.module';
 // import { PaymentModule } from './payments/payment.module';
-// import { CartModule } from './carts/cart.module';
-// import { ReviewModule } from './reviews/review.module';
-// import { NotificationModule } from './notifications/notification.module';
+import { CartModule } from './cart/cart.module';
 
 const ServerModules = [
   ScheduleModule.forRoot(),
@@ -26,11 +33,26 @@ const ServerModules = [
     }),
   }),
   ThrottlerModule.forRoot({
-    throttlers: [{ limit: 10, ttl: 60000 }],
+    throttlers: [{ limit: 100, ttl: 60000 }],
   }),
 ];
 
-const FeatureModules = []; // Add your feature modules here later
+const FeatureModules = [
+  FirebaseModule,
+  CartModule,
+  UsersModule,
+  AuthModule,
+  SharedModule,
+  AttributesModule,
+  CategoriesModule,
+  ProductsModule,
+  OrdersModule,
+  AdvertsModule,
+  PaymentSettingsModule,
+  DashboardModule,
+  DeliveryModule,
+  HealthModule,
+];
 
 @Module({
   imports: [...ServerModules, ...FeatureModules],

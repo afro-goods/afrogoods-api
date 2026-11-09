@@ -1,0 +1,99 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { AdvertsService } from './adverts.service';
+import { CreateAdvertDto } from './dto/create-advert.dto';
+import { UpdateAdvertDto } from './dto/update-advert.dto';
+import { ReviewAdvertDto } from './dto/review-advert.dto';
+import { AdvertQueryDto } from './dto/advert-query.dto';
+import { FirebaseAuthGuard } from 'src/auth/guards/firebase-auth.guard';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+import { UserRole } from 'src/users/enum/user.enum';
+import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
+import { User } from 'src/users/schemas/user.schema';
+
+@Controller('adverts')
+export class AdvertsController {
+  constructor(private readonly advertsService: AdvertsService) {}
+
+  /** ---------------- Public Endpoints ---------------- */
+
+  @Get()
+  async findAll(@Query() query: AdvertQueryDto) {
+    return this.advertsService.findAll(query, false);
+  }
+
+  /** ---------------- Customer Endpoints (Auth Required) ---------------- */
+
+  @Get('me')
+  @UseGuards(FirebaseAuthGuard)
+  async myAdverts(@Query() query: AdvertQueryDto, @CurrentUser() user: User) {
+    query.owner = user._id.toString();
+    return this.advertsService.findAll(query, true);
+  }
+
+  @Post()
+  @UseGuards(FirebaseAuthGuard)
+  async create(@Body() dto: CreateAdvertDto, @CurrentUser() user: User) {
+    return this.advertsService.create(dto, user._id.toString());
+  }
+
+  @Patch(':id')
+  @UseGuards(FirebaseAuthGuard)
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateAdvertDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.advertsService.update(id, dto, user._id.toString());
+  }
+
+  @Delete(':id')
+  @UseGuards(FirebaseAuthGuard)
+  async remove(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.advertsService.remove(id, user._id.toString());
+  }
+
+  /** ---------------- Admin Endpoints ---------------- */
+
+  @Get('admin')
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async adminFindAll(@Query() query: AdvertQueryDto) {
+    return this.advertsService.findAll(query, true);
+  }
+
+  @Patch(':id/review')
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async review(
+    @Param('id') id: string,
+    @Body() dto: ReviewAdvertDto,
+    @CurrentUser() admin: User,
+  ) {
+    return this.advertsService.review(id, dto, admin._id.toString());
+  }
+
+  @Delete('admin/:id')
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async adminRemove(@Param('id') id: string) {
+    return this.advertsService.adminRemove(id);
+  }
+
+  /** ---------------- Public Endpoints (with param) ---------------- */
+
+  @Get(':id')
+  async findOne(@Param('id') id: string) {
+    return this.advertsService.findOne(id);
+  }
+}

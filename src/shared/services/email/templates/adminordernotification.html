@@ -1,0 +1,43 @@
+<h2>New Order Received</h2>
+
+<p>A new order has been placed on AfroGoods.</p>
+
+<div
+  style="
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-left: 4px solid #007bff;
+    border-radius: 3px;
+    margin: 20px 0;
+  "
+>
+  <h3 style="margin-top: 0; color: #0056b3">Order Details</h3>
+  <table style="width: 100%; border-collapse: collapse">
+    <tr>
+      <td style="padding: 5px 0"><strong>Order Number:</strong></td>
+      <td style="padding: 5px 0; text-align: right">{{orderId}}</td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 0"><strong>Total Amount:</strong></td>
+      <td style="padding: 5px 0; text-align: right">
+        <strong>{{currency totalAmount 'CAD'}}</strong>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 0"><strong>Customer Name:</strong></td>
+      <td style="padding: 5px 0; text-align: right">{{customerName}}</td>
+    </tr>
+    <tr>
+      <td style="padding: 5px 0"><strong>Customer Email:</strong></td>
+      <td style="padding: 5px 0; text-align: right">{{customerEmail}}</td>
+    </tr>
+  </table>
+</div>
+
+<p>Please expect a payment verification via WhatsApp.</p>
+
+<div class="text-center">
+  <a href="{{adminDashboardUrl}}/orders/{{orderId}}" class="button"
+    >View Order in Admin Dashboard</a
+  >
+</div>

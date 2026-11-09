@@ -2,6 +2,12 @@
 /dist
 /node_modules
 /build
+/utils
+/scripts
+/test-email
+/test
+
+/utils/*.json
 
 # Logs
 logs
